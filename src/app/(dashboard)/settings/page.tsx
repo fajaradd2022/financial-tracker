@@ -32,13 +32,11 @@ export default function SettingsPage() {
     addWaNumber,
     updateWaNumber,
     deleteWaNumber,
-    resetDemoData,
   } = useStore();
 
   const [ingestionFormOpen, setIngestionFormOpen] = useState(false);
   const [waFormOpen, setWaFormOpen] = useState(false);
   const [deletingWa, setDeletingWa] = useState<WhatsAppNumber | null>(null);
-  const [resetOpen, setResetOpen] = useState(false);
 
   return (
     <div className="space-y-5">
@@ -90,7 +88,11 @@ export default function SettingsPage() {
             />
             <Stat
               label="Polling terakhir"
-              value={formatDateTime(ingestion.lastPolledAt)}
+              value={
+                ingestion.lastPolledAt
+                  ? formatDateTime(ingestion.lastPolledAt)
+                  : "Belum pernah"
+              }
             />
             <Stat
               label="Backfill histori"
@@ -197,23 +199,6 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      <Card className="border-rose-200 dark:border-rose-500/30">
-        <CardHeader
-          title="Data demo"
-          description="Data keuangan masih dummy di browser (autentikasi sudah nyata)"
-        />
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-          <p className="max-w-md text-xs text-muted">
-            Transaksi, kategori, dan rekening tersimpan di localStorage browser
-            ini. Akun & sesi login sudah tersimpan di database sungguhan. Reset
-            hanya mengembalikan data keuangan dummy.
-          </p>
-          <Button variant="danger" size="sm" onClick={() => setResetOpen(true)}>
-            Reset data demo
-          </Button>
-        </div>
-      </Card>
-
       {ingestionFormOpen ? (
         <IngestionForm
           config={ingestion}
@@ -243,15 +228,6 @@ export default function SettingsPage() {
             </>
           ) : null
         }
-      />
-
-      <ConfirmDialog
-        open={resetOpen}
-        onClose={() => setResetOpen(false)}
-        onConfirm={resetDemoData}
-        title="Reset data demo?"
-        confirmLabel="Reset"
-        message="Semua perubahan data keuangan di browser ini akan hilang dan kembali ke kondisi awal. Akun login tidak terpengaruh."
       />
     </div>
   );

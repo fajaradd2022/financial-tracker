@@ -1,15 +1,24 @@
 "use client";
 
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { createContext, useContext, useMemo, useTransition } from "react";
 import {
-  DUMMY_CASH_ENTRIES,
-  DUMMY_CATEGORIES,
-  DUMMY_INGESTION_CONFIG,
-  DUMMY_OWN_ACCOUNTS,
-  DUMMY_SOURCE_HEALTH,
-  DUMMY_TRANSACTIONS,
-  DUMMY_WA_NUMBERS,
-} from "./dummy-data";
+  createCashEntryAction,
+  createCategoryAction,
+  createOwnAccountAction,
+  createTransactionAction,
+  createWhatsAppNumberAction,
+  deleteCashEntryAction,
+  deleteCategoryAction,
+  deleteOwnAccountAction,
+  deleteTransactionAction,
+  deleteWhatsAppNumberAction,
+  updateCashEntryAction,
+  updateCategoryAction,
+  updateIngestionConfigAction,
+  updateOwnAccountAction,
+  updateTransactionAction,
+  updateWhatsAppNumberAction,
+} from "@/app/actions";
 import { dayKey } from "./format";
 import { isInPeriod, type Period } from "./period";
 import type {
@@ -23,22 +32,18 @@ import type {
 } from "./types";
 
 /**
- * Store demo pengganti backend.
+ * Penyedia data aplikasi untuk komponen client.
  *
- * Dibuat sebagai *external store* (di luar React) lalu dibaca lewat
- * `useSyncExternalStore`, bukan useState + useEffect. Alasannya: data awal
- * datang dari localStorage yang hanya ada di browser. Dengan pola ini React
- * memakai `getServerSnapshot` saat render server & hydration, lalu otomatis
- * beralih ke snapshot browser — tanpa efek yang men-set state (yang memicu
- * cascading render) dan tanpa hydration mismatch.
+ * Datanya diambil di server (lihat `(dashboard)/layout.tsx`) lalu diturunkan
+ * lewat context; mutasinya memanggil server action. Setiap action memanggil
+ * `revalidatePath`, jadi halaman otomatis dirender ulang dengan data terbaru —
+ * tidak ada salinan state di client yang bisa menyimpang dari isi database.
  *
- * Bentuk API-nya sengaja mirip repository asli (`updateTransaction(id, patch)`),
- * supaya saat backend siap, komponen tinggal ganti pemanggilan ke server action.
+ * Bentuk `useStore()` sengaja dipertahankan sama seperti saat masih memakai
+ * data dummy, supaya perpindahan ke database tidak merembet ke seluruh halaman.
  */
 
-const STORAGE_KEY = "financial-tracker:demo-state:v1";
-
-interface StoreState {
+export interface AppData {
   transactions: Transaction[];
   categories: Category[];
   ownAccounts: OwnAccount[];
@@ -46,222 +51,114 @@ interface StoreState {
   waNumbers: WhatsAppNumber[];
   sourceHealth: SourceHealth[];
   ingestion: IngestionConfig;
+  /**
+   * Nama pemilik rekening untuk pencocokan nama cadangan. Diturunkan dari env
+   * di sisi server — data pribadi yang tidak layak ditanam di kode maupun
+   * disimpan di database bersama data transaksi.
+   */
+  ownerNames: string[];
 }
 
-function freshState(): StoreState {
-  return {
-    transactions: DUMMY_TRANSACTIONS,
-    categories: DUMMY_CATEGORIES,
-    ownAccounts: DUMMY_OWN_ACCOUNTS,
-    cashEntries: DUMMY_CASH_ENTRIES,
-    waNumbers: DUMMY_WA_NUMBERS,
-    sourceHealth: DUMMY_SOURCE_HEALTH,
-    ingestion: DUMMY_INGESTION_CONFIG,
-  };
+interface StoreValue extends AppData {
+  /** true selama mutasi berjalan — dipakai menonaktifkan tombol. */
+  isMutating: boolean;
+  categoryById: (id: string | null) => Category | undefined;
+  cashBalance: number;
+
+  updateTransaction: (id: string, patch: Partial<Transaction>) => void;
+  deleteTransaction: (id: string) => void;
+  addTransaction: (tx: Omit<Transaction, "id">) => void;
+
+  addCategory: (input: Omit<Category, "id">) => void;
+  updateCategory: (id: string, patch: Partial<Category>) => void;
+  deleteCategory: (id: string) => void;
+
+  addOwnAccount: (input: Omit<OwnAccount, "id">) => void;
+  updateOwnAccount: (id: string, patch: Partial<OwnAccount>) => void;
+  deleteOwnAccount: (id: string) => void;
+
+  addCashEntry: (input: Omit<CashWalletEntry, "id">) => void;
+  updateCashEntry: (id: string, patch: Partial<CashWalletEntry>) => void;
+  deleteCashEntry: (id: string) => void;
+
+  addWaNumber: (input: Omit<WhatsAppNumber, "id">) => void;
+  updateWaNumber: (id: string, patch: Partial<WhatsAppNumber>) => void;
+  deleteWaNumber: (id: string) => void;
+
+  updateIngestion: (patch: Partial<IngestionConfig>) => void;
 }
 
-/** Referensi tetap — `getServerSnapshot` wajib mengembalikan objek yang sama. */
-const SERVER_STATE: StoreState = freshState();
+const StoreContext = createContext<StoreValue | null>(null);
 
-let state: StoreState = SERVER_STATE;
-let loadedFromStorage = false;
-const listeners = new Set<() => void>();
+export function StoreProvider({
+  data,
+  children,
+}: {
+  data: AppData;
+  children: React.ReactNode;
+}) {
+  const [isMutating, startTransition] = useTransition();
 
-function emit() {
-  for (const listener of listeners) listener();
-}
+  const value = useMemo<StoreValue>(() => {
+    // Dibungkus transition supaya React tahu render ulang setelah action
+    // adalah pembaruan non-mendesak — UI tetap responsif selagi menunggu.
+    const run = (action: () => Promise<unknown>) => {
+      startTransition(async () => {
+        await action();
+      });
+    };
 
-function persist() {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // localStorage bisa gagal (mode privat/kuota penuh). Kegagalan menyimpan
-    // tidak boleh merusak UI — data tetap hidup di memori.
-  }
-}
+    const cashBalance = data.cashEntries.reduce(
+      (sum, entry) =>
+        entry.entryType === "manual_expense_debit"
+          ? sum - entry.amount
+          : sum + entry.amount,
+      0,
+    );
 
-function loadFromStorage() {
-  loadedFromStorage = true;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw) state = { ...freshState(), ...JSON.parse(raw) };
-  } catch {
-    // data rusak / tidak bisa dibaca -> pakai data dummy apa adanya
-  }
-}
-
-function subscribe(listener: () => void) {
-  // Pembacaan localStorage dilakukan saat langganan pertama (pasti di browser).
-  // React membaca ulang snapshot setelah subscribe, jadi perubahan di sini
-  // otomatis terdeteksi tanpa perlu emit manual.
-  if (!loadedFromStorage) loadFromStorage();
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-const getSnapshot = () => state;
-const getServerSnapshot = () => SERVER_STATE;
-
-function setState(updater: (prev: StoreState) => StoreState) {
-  state = updater(state);
-  persist();
-  emit();
-}
-
-let idCounter = 0;
-function nextId(prefix: string): string {
-  idCounter += 1;
-  return `${prefix}-${Date.now().toString(36)}-${idCounter}`;
-}
-
-/**
- * Kunci-kunci StoreState yang isinya daftar berisi `id` — hanya itu yang boleh
- * lewat helper di bawah. `ingestion` bukan daftar, jadi otomatis tersaring.
- */
-type ListKey = {
-  [K in keyof StoreState]: StoreState[K] extends { id: string }[] ? K : never;
-}[keyof StoreState];
-
-/** Helper generik untuk patch/hapus baris pada salah satu koleksi. */
-function patchIn<K extends ListKey>(
-  key: K,
-  id: string,
-  patch: Partial<StoreState[K][number]>,
-) {
-  setState((prev) => ({
-    ...prev,
-    [key]: (prev[key] as { id: string }[]).map((item) =>
-      item.id === id ? { ...item, ...patch } : item,
-    ),
-  }));
-}
-
-function removeIn(key: ListKey, id: string) {
-  setState((prev) => ({
-    ...prev,
-    [key]: (prev[key] as { id: string }[]).filter((item) => item.id !== id),
-  }));
-}
-
-/**
- * Provider dipertahankan sebagai pembungkus eksplisit di layout, walau store-nya
- * modul-global — supaya batas "area yang punya data" tetap terbaca di kode.
- */
-export function StoreProvider({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
-}
-
-export function useStore() {
-  const snapshot = useSyncExternalStore(
-    subscribe,
-    getSnapshot,
-    getServerSnapshot,
-  );
-
-  const categoryById = useCallback(
-    (id: string | null) =>
-      id ? snapshot.categories.find((c) => c.id === id) : undefined,
-    [snapshot.categories],
-  );
-
-  const cashBalance = useMemo(
-    () =>
-      snapshot.cashEntries.reduce(
-        (sum, entry) =>
-          entry.entryType === "manual_expense_debit"
-            ? sum - entry.amount
-            : sum + entry.amount,
-        0,
-      ),
-    [snapshot.cashEntries],
-  );
-
-  return useMemo(
-    () => ({
-      ...snapshot,
-      categoryById,
+    return {
+      ...data,
+      isMutating,
       cashBalance,
+      categoryById: (id) =>
+        id ? data.categories.find((c) => c.id === id) : undefined,
 
-      // Transaksi
-      updateTransaction: (id: string, patch: Partial<Transaction>) =>
-        patchIn("transactions", id, patch),
-      deleteTransaction: (id: string) =>
-        setState((prev) => ({
-          ...prev,
-          transactions: prev.transactions.filter((t) => t.id !== id),
-          // Baris dompet tunai yang lahir dari transaksi ini ikut dibuang,
-          // supaya saldo tidak lagi menghitung tarik tunai yang sudah tiada.
-          cashEntries: prev.cashEntries.filter((e) => e.transactionId !== id),
-        })),
-      addTransaction: (tx: Omit<Transaction, "id">) => {
-        const id = nextId("tx");
-        setState((prev) => ({
-          ...prev,
-          transactions: [{ ...tx, id }, ...prev.transactions],
-        }));
-        return id;
-      },
+      updateTransaction: (id, patch) =>
+        run(() => updateTransactionAction(id, patch)),
+      deleteTransaction: (id) => run(() => deleteTransactionAction(id)),
+      addTransaction: (tx) => run(() => createTransactionAction(tx)),
 
-      // Kategori
-      addCategory: (input: Omit<Category, "id">) =>
-        setState((prev) => ({
-          ...prev,
-          categories: [...prev.categories, { ...input, id: nextId("cat") }],
-        })),
-      updateCategory: (id: string, patch: Partial<Category>) =>
-        patchIn("categories", id, patch),
-      deleteCategory: (id: string) => removeIn("categories", id),
+      addCategory: (input) => run(() => createCategoryAction(input)),
+      updateCategory: (id, patch) => run(() => updateCategoryAction(id, patch)),
+      deleteCategory: (id) => run(() => deleteCategoryAction(id)),
 
-      // Rekening sendiri
-      addOwnAccount: (input: Omit<OwnAccount, "id">) =>
-        setState((prev) => ({
-          ...prev,
-          ownAccounts: [...prev.ownAccounts, { ...input, id: nextId("acc") }],
-        })),
-      updateOwnAccount: (id: string, patch: Partial<OwnAccount>) =>
-        patchIn("ownAccounts", id, patch),
-      deleteOwnAccount: (id: string) => removeIn("ownAccounts", id),
+      addOwnAccount: (input) => run(() => createOwnAccountAction(input)),
+      updateOwnAccount: (id, patch) =>
+        run(() => updateOwnAccountAction(id, patch)),
+      deleteOwnAccount: (id) => run(() => deleteOwnAccountAction(id)),
 
-      // Dompet tunai
-      addCashEntry: (input: Omit<CashWalletEntry, "id">) =>
-        setState((prev) => ({
-          ...prev,
-          cashEntries: [{ ...input, id: nextId("cw") }, ...prev.cashEntries],
-        })),
-      updateCashEntry: (id: string, patch: Partial<CashWalletEntry>) =>
-        patchIn("cashEntries", id, patch),
-      deleteCashEntry: (id: string) => removeIn("cashEntries", id),
+      addCashEntry: (input) => run(() => createCashEntryAction(input)),
+      updateCashEntry: (id, patch) => run(() => updateCashEntryAction(id, patch)),
+      deleteCashEntry: (id) => run(() => deleteCashEntryAction(id)),
 
-      // Nomor WhatsApp
-      addWaNumber: (input: Omit<WhatsAppNumber, "id">) =>
-        setState((prev) => ({
-          ...prev,
-          waNumbers: [...prev.waNumbers, { ...input, id: nextId("wa") }],
-        })),
-      updateWaNumber: (id: string, patch: Partial<WhatsAppNumber>) =>
-        patchIn("waNumbers", id, patch),
-      deleteWaNumber: (id: string) => removeIn("waNumbers", id),
+      addWaNumber: (input) => run(() => createWhatsAppNumberAction(input)),
+      updateWaNumber: (id, patch) =>
+        run(() => updateWhatsAppNumberAction(id, patch)),
+      deleteWaNumber: (id) => run(() => deleteWhatsAppNumberAction(id)),
 
-      // Konfigurasi ingestion
-      updateIngestion: (patch: Partial<IngestionConfig>) =>
-        setState((prev) => ({
-          ...prev,
-          ingestion: { ...prev.ingestion, ...patch },
-        })),
+      updateIngestion: (patch) => run(() => updateIngestionConfigAction(patch)),
+    };
+  }, [data, isMutating]);
 
-      resetDemoData: () => {
-        try {
-          window.localStorage.removeItem(STORAGE_KEY);
-        } catch {
-          // abaikan
-        }
-        setState(() => freshState());
-      },
-    }),
-    [snapshot, categoryById, cashBalance],
+  return (
+    <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
   );
+}
+
+export function useStore(): StoreValue {
+  const ctx = useContext(StoreContext);
+  if (!ctx) throw new Error("useStore harus dipakai di dalam <StoreProvider>");
+  return ctx;
 }
 
 // ---------------------------------------------------------------------------

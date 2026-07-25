@@ -15,7 +15,6 @@ import {
   Select,
   Toggle,
 } from "@/components/ui";
-import { OWNER_NAMES } from "@/lib/dummy-data";
 import { OWNER_LABEL, SOURCE_LABEL, SOURCE_STYLE } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import type { AccountOwner, BankSource, OwnAccount } from "@/lib/types";
@@ -32,6 +31,7 @@ const BANK_OPTIONS: BankSource[] = [
 
 export default function AccountsPage() {
   const {
+    ownerNames,
     ownAccounts,
     transactions,
     addOwnAccount,
@@ -107,7 +107,7 @@ export default function AccountsPage() {
             <Card key={owner}>
               <CardHeader
                 title={OWNER_LABEL[owner]}
-                description={`${OWNER_NAMES[owner]} · ${accounts.length} rekening`}
+                description={`${accounts.length} rekening & e-wallet`}
               />
               <div className="divide-y divide-line">
                 {accounts.map((account) => (
@@ -194,19 +194,24 @@ export default function AccountsPage() {
             transaksinya <strong className="text-foreground">perlu direview</strong>{" "}
             karena tingkat keyakinannya lebih rendah daripada cocok nomor rekening.
           </p>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(OWNER_NAMES).map(([owner, name]) => (
-              <span
-                key={owner}
-                className="rounded-lg border border-line px-2.5 py-1.5 text-xs"
-              >
-                <span className="text-muted">
-                  {OWNER_LABEL[owner as AccountOwner]}:
-                </span>{" "}
-                <span className="font-medium">{name}</span>
-              </span>
-            ))}
-          </div>
+          {ownerNames.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {ownerNames.map((name) => (
+                <span
+                  key={name}
+                  className="rounded-lg border border-line px-2.5 py-1.5 text-xs font-medium"
+                >
+                  {name}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300">
+              Belum ada nama terdaftar. Isi <code>OWNER_ACCOUNT_NAMES</code> di
+              berkas <code>.env</code> (dipisah koma) agar pencocokan nama
+              cadangan ini bisa bekerja.
+            </p>
+          )}
         </div>
       </Card>
 
@@ -325,8 +330,8 @@ function AccountFormInner({
             value={owner}
             onChange={(e) => setOwner(e.target.value as AccountOwner)}
           >
-            <option value="husband">Suami — {OWNER_NAMES.husband}</option>
-            <option value="wife">Istri — {OWNER_NAMES.wife}</option>
+            <option value="husband">Suami</option>
+            <option value="wife">Istri</option>
           </Select>
         </Field>
         <Field label="Bank / e-wallet">

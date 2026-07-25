@@ -17,11 +17,20 @@ import { dirname, resolve } from "node:path";
  * karena aplikasi ini bukan layanan publik.
  */
 
-export const AUTH_DB_PATH = resolve(process.cwd(), "data/auth.db");
+/**
+ * Better Auth memakai file database yang sama dengan tabel aplikasi.
+ * Tabelnya berbeda (user/session/account/verification vs transactions dll),
+ * jadi tidak bertabrakan — dan backup cukup menyalin satu file.
+ */
+export const AUTH_DB_PATH = process.env.DATABASE_PATH
+  ? resolve(process.env.DATABASE_PATH)
+  : resolve(process.cwd(), "data/app.db");
 
 export function openAuthDatabase() {
   mkdirSync(dirname(AUTH_DB_PATH), { recursive: true });
-  return new Database(AUTH_DB_PATH);
+  const sqlite = new Database(AUTH_DB_PATH);
+  sqlite.pragma("journal_mode = WAL");
+  return sqlite;
 }
 
 // `satisfies`, bukan anotasi tipe: anotasi akan melebarkan tipe literalnya dan

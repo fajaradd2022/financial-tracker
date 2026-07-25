@@ -8,15 +8,23 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "auth:setup": "node --experimental-strip-types scripts/setup-auth.ts"
+    "db:generate": "drizzle-kit generate",
+    "db:setup": "tsx scripts/db-setup.ts",
+    "db:studio": "drizzle-kit studio",
+    "db:inspect": "tsx scripts/db-inspect.ts",
+    "poll": "tsx scripts/poll-gmail.ts",
+    "test:pipeline": "tsx scripts/test-pipeline.ts"
   },
   "dependencies": {
     "better-auth": "^1.6.25",
     "better-sqlite3": "^12.11.1",
+    "drizzle-orm": "^0.45.2",
     "next": "16.2.11",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "write-excel-file": "^4.1.1"
+    "server-only": "^0.0.1",
+    "write-excel-file": "^4.1.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -24,9 +32,11 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.11",
     "tailwindcss": "^4",
+    "tsx": "^4.23.1",
     "typescript": "^5"
   }
 }

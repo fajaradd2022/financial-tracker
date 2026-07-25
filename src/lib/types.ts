@@ -126,7 +126,8 @@ export interface IngestionConfig {
   /** Menarik email lama saat pertama diaktifkan. */
   backfillEnabled: boolean;
   enabled: boolean;
-  lastPolledAt: string;
+  /** null selama polling belum pernah berjalan sama sekali. */
+  lastPolledAt: string | null;
 }
 
 /** Hasil validasi ingestion per sumber — dipakai di halaman Pengaturan. */

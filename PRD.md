@@ -43,7 +43,8 @@ Membangun aplikasi financial tracking yang **otomatis** menangkap transaksi dari
 - Saldo cash wallet ditampilkan di dashboard; kalau negatif, tampil alert informatif (tidak memblokir).
 
 ### 4.5 Web App
-- Login: Google OAuth, dibatasi hanya untuk 1 akun (Anda).
+- Login: email + password lewat Better Auth, tanpa pendaftaran mandiri (akun dibuat admin).
+  - *Perubahan dari rencana awal (Google OAuth):* dipilih agar autentikasi bisa langsung berfungsi tanpa menunggu kredensial Google Cloud. Better Auth mendukung Google OAuth sebagai provider tambahan, jadi bisa ditambahkan belakangan tanpa mengganti sistemnya.
 - Halaman: daftar transaksi (dengan badge review), manajemen whitelist rekening sendiri, manajemen kategori, halaman cash wallet + input manual, dashboard ringkasan.
 - Responsive (bisa diakses dari HP), berpotensi PWA di masa depan.
 
@@ -58,7 +59,8 @@ Membangun aplikasi financial tracking yang **otomatis** menangkap transaksi dari
 ## 5. Non-Functional Requirements
 
 - **Hosting:** Cloud VPS milik user (sudah ada), deployment single-process (pm2/systemd), tidak serverless.
-- **Stack:** Next.js (TypeScript) + PostgreSQL + Drizzle ORM.
+- **Stack:** Next.js (TypeScript) + SQLite + Drizzle ORM.
+  - *Perubahan dari rencana awal (PostgreSQL):* untuk beban satu keluarga, SQLite sudah lebih dari cukup dan menghilangkan satu layanan yang harus dipasang, di-backup, dan dijaga di VPS — backup cukup menyalin satu berkas. Semua kueri ditulis lewat Drizzle dan terkumpul di satu berkas repository, jadi pindah ke Postgres nanti berhenti di situ saja.
 - **Keamanan:** Kredensial Gmail (refresh token), API key OpenRouter, session WAHA, semua disimpan di luar git (env file di VPS, bukan di database/kode). Email inbox terpisah dari email pribadi supaya blast radius kecil kalau ada masalah.
 - **Auditability:** Setiap transaksi menyimpan raw email snippet & raw LLM response untuk keperluan debug/reprocessing.
 
