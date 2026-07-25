@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+/* Dark mode dikendalikan lewat class `.dark` di <html>, bukan media query,
+   supaya tombol toggle tema bisa menimpa preferensi sistem. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #f6f7fb;
+  --surface: #ffffff;
+  --surface-muted: #f1f5f9;
+  --foreground: #0f172a;
+  --muted: #64748b;
+  --line: #e2e8f0;
+  --brand: #4f46e5;
+}
+
+.dark {
+  --background: #070b16;
+  --surface: #0f1729;
+  --surface-muted: #16203a;
+  --foreground: #e6ecf7;
+  --muted: #93a3bd;
+  --line: #1e293b;
+  --brand: #818cf8;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-brand: var(--brand);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Angka rupiah lebih mudah dibandingkan kalau lebar digitnya seragam. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Toggle sensor nominal -------------------------------------------------
+   Penyembunyian dikerjakan CSS, bukan state React, supaya nominal asli tidak
+   pernah sempat ter-render walau satu frame saat halaman dimuat.
+   Semua nilai tersamar memakai lebar yang sama, jadi panjang angkanya pun
+   tidak membocorkan besarannya. */
+:root[data-balance="hidden"] .sensitive-value {
+  display: none;
+}
+:root[data-balance="hidden"] .sensitive::after {
+  content: "Rp ••••••";
+  letter-spacing: 0.08em;
+}
+
+.balance-shown-only {
+  display: inline-flex;
+  align-items: center;
+}
+.balance-hidden-only {
+  display: none;
+}
+:root[data-balance="hidden"] .balance-shown-only {
+  display: none;
+}
+:root[data-balance="hidden"] .balance-hidden-only {
+  display: inline-flex;
+  align-items: center;
+}
