@@ -19,7 +19,9 @@ import { join } from "node:path";
 // database di bawah memakai dynamic import, bukan import statis di atas.
 const testDir = mkdtempSync(join(tmpdir(), "ft-test-"));
 process.env.DATABASE_PATH = join(testDir, "test.db");
-process.env.OWNER_ACCOUNT_NAMES = "FAJAR ADITYA,ANNISA PUTRI";
+
+const USER = "user-uji";
+const OWNER_NAMES = ["FAJAR ADITYA"];
 
 type Check = { name: string; ok: boolean; detail?: string };
 const checks: Check[] = [];
@@ -33,20 +35,20 @@ function check(name: string, ok: boolean, detail?: string) {
  * Ini membuat pengujian deterministik dan gratis, sekaligus memastikan pipeline
  * memang memanggil ekstraksi dan kategorisasi pada tahap yang benar.
  */
-function fakeCompletion(messages: { role: string; content: string }[]) {
-  const prompt = messages[messages.length - 1].content;
+function fakeCompletion(messages: { role: string; content: string | null }[]) {
+  const prompt = messages[messages.length - 1].content ?? "";
 
   // Panggilan kategorisasi
   if (prompt.includes("Kategori tersedia:")) {
-    if (prompt.includes("KOPI KENANGAN")) {
+    const pick = (label: string) => {
       const index = prompt
         .split("\n")
-        .find((l) => l.includes("Makanan & Minuman"))
+        .find((l) => l.includes(label))
         ?.split(".")[0];
-      return Promise.resolve(
-        JSON.stringify({ index: Number(index), confident: true }),
-      );
-    }
+      return JSON.stringify({ index: Number(index), confident: true });
+    };
+    if (prompt.includes("KOPI KENANGAN")) return Promise.resolve(pick("Makanan & Minuman"));
+    if (prompt.includes("ANNISA PUTRI")) return Promise.resolve(pick("Kolaborasi Keluar"));
     const index = prompt
       .split("\n")
       .find((l) => l.includes("Lainnya"))
@@ -57,7 +59,7 @@ function fakeCompletion(messages: { role: string; content: string }[]) {
   }
 
   // Panggilan ekstraksi
-  if (prompt.includes("ANNISA PUTRI") && prompt.includes("0987654321")) {
+  if (prompt.includes("0987654321")) {
     return Promise.resolve(
       JSON.stringify({
         isTransactionEmail: true,
@@ -67,6 +69,20 @@ function fakeCompletion(messages: { role: string; content: string }[]) {
         counterpartyAccountNumber: "0987654321",
         occurredAt: "2026-07-25T10:20:00+07:00",
         rawTransactionType: "TRANSFER KELUAR",
+        confidence: "high",
+      }),
+    );
+  }
+  if (prompt.includes("901234567890")) {
+    return Promise.resolve(
+      JSON.stringify({
+        isTransactionEmail: true,
+        direction: "out",
+        amount: 3_000_000,
+        counterpartyName: "FAJAR ADITYA",
+        counterpartyAccountNumber: "901234567890",
+        occurredAt: "2026-07-14T16:41:00+07:00",
+        rawTransactionType: "TRANSFER KELUAR - SEABANK",
         confidence: "high",
       }),
     );
@@ -99,13 +115,13 @@ function fakeCompletion(messages: { role: string; content: string }[]) {
       }),
     );
   }
-  if (prompt.includes("ANNISA P*****")) {
+  if (prompt.includes("FAJAR A*****")) {
     return Promise.resolve(
       JSON.stringify({
         isTransactionEmail: true,
         direction: "out",
         amount: 1_200_000,
-        counterpartyName: "ANNISA P*****",
+        counterpartyName: "FAJAR A*****",
         counterpartyAccountNumber: null,
         occurredAt: "2026-07-08T13:47:00+07:00",
         rawTransactionType: "TRANSFER KELUAR",
@@ -143,67 +159,66 @@ async function main() {
   const { db } = await import("../src/db/connection");
   const repo = await import("../src/db/repositories");
   const { ingestMessage } = await import("../src/lib/ingestion/pipeline");
-  const { SEED_CATEGORIES } = await import("../src/db/seed-data");
-  const { categories } = await import("../src/db/schema");
 
   migrate(db, { migrationsFolder: "./drizzle" });
+  await repo.provisionNewUser(USER);
 
-  await db.insert(categories).values(
-    SEED_CATEGORIES.map((c) => ({
-      name: c.name,
-      kind: c.kind,
-      sortOrder: c.sortOrder,
-      isSystem: "isSystem" in c ? c.isSystem : false,
-    })),
-  );
-
-  // Rekening istri didaftarkan — inilah yang harus membuat transfer ke sana
-  // dikenali sebagai transfer internal.
-  await repo.insertOwnAccount({
-    owner: "wife",
-    bank: "bca",
-    accountNumberOrIdentifier: "0987654321",
-    label: "BCA Istri",
+  // HANYA rekening milik user ini. Rekening pasangan TIDAK didaftarkan di sini
+  // — sejak aplikasi multi-tenant, pasangan adalah tenant terpisah.
+  await repo.insertOwnAccount(USER, {
+    bank: "seabank",
+    accountNumberOrIdentifier: "901234567890",
+    label: "SeaBank Saya",
     isActive: true,
   });
 
-  const deps = { completion: fakeCompletion };
+  const deps = { completion: fakeCompletion, ownerNames: OWNER_NAMES };
+  const find = async (msgId: string) =>
+    (await repo.listTransactions(USER)).find((t) => t.gmailMessageId === msgId);
 
-  // --- 1. Transfer ke rekening sendiri (cocok nomor rekening) ---------------
-  const transferMsg = email(
-    "msg-transfer",
+  // --- 1. Transfer ke rekening SENDIRI (masih internal) --------------------
+  await ingestMessage(
+    USER,
+    email(
+      "msg-own",
+      "notifikasi@bca.co.id",
+      "Notifikasi Transaksi",
+      "Transfer ke 901234567890 a.n FAJAR ADITYA sebesar Rp3.000.000,00 berhasil.",
+    ),
+    deps,
+  );
+  const ownRow = await find("msg-own");
+
+  check("Transfer antar rekening sendiri tetap internal", ownRow?.isInternalTransfer === true);
+  check(
+    "Cocok lewat nomor rekening (bukan nama)",
+    ownRow?.internalTransferMatchType === "account_number",
+  );
+  check("Cocok nomor rekening tidak perlu direview", ownRow?.needsReview === false);
+
+  // --- 2. Transfer ke rekening PASANGAN (kini pengeluaran) -----------------
+  const spouseMsg = email(
+    "msg-spouse",
     "notifikasi@bca.co.id",
     "Notifikasi Transaksi",
     "Transfer ke 0987654321 a.n ANNISA PUTRI sebesar Rp5.000.000,00 berhasil.",
   );
-  const transfer = await ingestMessage(transferMsg, deps);
-  const transferRow = (await repo.listTransactions()).find(
-    (t) => t.gmailMessageId === "msg-transfer",
-  );
+  await ingestMessage(USER, spouseMsg, deps);
+  const spouseRow = await find("msg-spouse");
 
-  check("Transfer internal tersimpan", transfer.status === "inserted");
   check(
-    "Transfer ke rekening sendiri ditandai internal",
-    transferRow?.isInternalTransfer === true,
+    "Transfer ke rekening pasangan BUKAN internal lagi",
+    spouseRow?.isInternalTransfer === false,
   );
-  check(
-    "Cocok lewat nomor rekening (bukan nama)",
-    transferRow?.internalTransferMatchType === "account_number",
-  );
-  check(
-    "Cocok nomor rekening tidak perlu direview",
-    transferRow?.needsReview === false,
-  );
+  check("Transfer ke pasangan tercatat sebagai pengeluaran", spouseRow?.direction === "out");
 
-  // --- 2. Idempotensi -------------------------------------------------------
-  const again = await ingestMessage(transferMsg, deps);
-  check(
-    "Email yang sama tidak tersimpan dua kali",
-    again.status === "skipped_duplicate",
-  );
+  // --- 3. Idempotensi -------------------------------------------------------
+  const again = await ingestMessage(USER, spouseMsg, deps);
+  check("Email yang sama tidak tersimpan dua kali", again.status === "skipped_duplicate");
 
-  // --- 3. Tarik tunai -------------------------------------------------------
+  // --- 4. Tarik tunai -------------------------------------------------------
   await ingestMessage(
+    USER,
     email(
       "msg-atm",
       "notifikasi@bca.co.id",
@@ -212,17 +227,12 @@ async function main() {
     ),
     deps,
   );
-  const atmRow = (await repo.listTransactions()).find(
-    (t) => t.gmailMessageId === "msg-atm",
-  );
-  const allCategories = await repo.listCategories();
-  const cashCategory = allCategories.find((c) => c.isSystem);
-  const cashEntries = await repo.listCashEntries();
+  const atmRow = await find("msg-atm");
+  const allCategories = await repo.listCategories(USER);
+  const cashCategory = allCategories.find((c) => c.systemKey === "cash_expense");
+  const cashEntries = await repo.listCashEntries(USER);
 
-  check(
-    "Tarik tunai berkategori Cash Expense otomatis",
-    atmRow?.categoryId === cashCategory?.id,
-  );
+  check("Tarik tunai berkategori Cash Expense otomatis", atmRow?.categoryId === cashCategory?.id);
   check(
     "Tarik tunai menambah saldo dompet tunai",
     cashEntries.some(
@@ -233,8 +243,9 @@ async function main() {
     ),
   );
 
-  // --- 4. Pengeluaran biasa + kategorisasi ---------------------------------
+  // --- 5. Pengeluaran biasa + kategorisasi ---------------------------------
   await ingestMessage(
+    USER,
     email(
       "msg-qris",
       "notifikasi@bca.co.id",
@@ -243,44 +254,33 @@ async function main() {
     ),
     deps,
   );
-  const qrisRow = (await repo.listTransactions()).find(
-    (t) => t.gmailMessageId === "msg-qris",
-  );
-  const foodCategory = allCategories.find(
-    (c) => c.name === "Makanan & Minuman",
-  );
+  const qrisRow = await find("msg-qris");
+  const foodCategory = allCategories.find((c) => c.name === "Makanan & Minuman");
 
-  check("Pengeluaran biasa tidak ditandai internal", qrisRow?.isInternalTransfer === false);
   check("Kategori dipilih LLM dari daftar", qrisRow?.categoryId === foodCategory?.id);
   check("Kategorisasi yakin tidak perlu direview", qrisRow?.needsReview === false);
 
-  // --- 5. Nama disamarkan -> cocok lewat nama, wajib direview ---------------
+  // --- 6. Nama sendiri disamarkan -> cocok lewat nama, wajib direview -------
   await ingestMessage(
+    USER,
     email(
       "msg-masked",
       "noreply@seabank.co.id",
       "Notifikasi Transaksi",
-      "Transfer sebesar Rp1.200.000 ke ANNISA P***** berhasil diproses.",
+      "Transfer sebesar Rp1.200.000 ke FAJAR A***** berhasil diproses.",
     ),
     deps,
   );
-  const maskedRow = (await repo.listTransactions()).find(
-    (t) => t.gmailMessageId === "msg-masked",
-  );
+  const maskedRow = await find("msg-masked");
 
-  check("Nama disamarkan tetap dikenali internal", maskedRow?.isInternalTransfer === true);
-  check(
-    "Cocok nama ditandai sebagai fuzzy_name",
-    maskedRow?.internalTransferMatchType === "fuzzy_name",
-  );
+  check("Nama sendiri yang disamarkan tetap dikenali internal", maskedRow?.isInternalTransfer === true);
+  check("Cocok nama ditandai sebagai fuzzy_name", maskedRow?.internalTransferMatchType === "fuzzy_name");
   check("Cocok nama wajib direview", maskedRow?.needsReview === true);
-  check(
-    "Alasan review-nya tepat",
-    maskedRow?.reviewReason === "fuzzy_internal_match",
-  );
+  check("Alasan review-nya tepat", maskedRow?.reviewReason === "fuzzy_internal_match");
 
-  // --- 6. Email non-transaksi ----------------------------------------------
+  // --- 7. Email non-transaksi ----------------------------------------------
   const promo = await ingestMessage(
+    USER,
     email(
       "msg-promo",
       "promo@bca.co.id",
@@ -289,28 +289,28 @@ async function main() {
     ),
     deps,
   );
-  check(
-    "Email promosi tidak jadi transaksi",
-    promo.status === "skipped_not_transaction",
-  );
+  check("Email promosi tidak jadi transaksi", promo.status === "skipped_not_transaction");
 
-  // --- 7. Sumber dikenali dari alamat pengirim ------------------------------
+  // --- 8. Sumber dikenali dari alamat pengirim ------------------------------
   check("Sumber BCA dikenali dari pengirim", qrisRow?.source === "bca");
   check("Sumber SeaBank dikenali dari pengirim", maskedRow?.source === "seabank");
 
-  // --- 8. Aturan produk: internal tidak masuk hitungan ----------------------
+  // --- 9. Aturan produk setelah pembalikan ---------------------------------
   const { summarizePeriod } = await import("../src/lib/store");
   const { allPeriod } = await import("../src/lib/period");
-  const summary = summarizePeriod(await repo.listTransactions(), allPeriod());
+  const summary = summarizePeriod(await repo.listTransactions(USER), allPeriod());
 
+  // Tarik tunai + QRIS + transfer ke pasangan. Transfer antar rekening sendiri
+  // (3jt) dan yang cocok lewat nama (1,2jt) TIDAK ikut.
+  const expected = 1_500_000 + 32_000 + 5_000_000;
   check(
-    "Transfer internal tidak dihitung sebagai pengeluaran",
-    summary.expense === 1_500_000 + 32_000,
-    `pengeluaran = ${summary.expense}, seharusnya ${1_500_000 + 32_000}`,
+    "Transfer ke pasangan kini masuk total pengeluaran",
+    summary.expense === expected,
+    `pengeluaran = ${summary.expense}, seharusnya ${expected}`,
   );
   check(
-    "Transfer internal dilaporkan terpisah",
-    summary.internalTransferTotal === 5_000_000 + 1_200_000,
+    "Transfer antar rekening sendiri tetap dikecualikan",
+    summary.internalTransferTotal === 3_000_000 + 1_200_000,
     `internal = ${summary.internalTransferTotal}`,
   );
 
@@ -323,9 +323,7 @@ async function main() {
   }
 
   const failed = checks.filter((c) => !c.ok).length;
-  console.log(
-    `\n${checks.length - failed}/${checks.length} pemeriksaan lolos.`,
-  );
+  console.log(`\n${checks.length - failed}/${checks.length} pemeriksaan lolos.`);
   if (failed > 0) process.exit(1);
 }
 

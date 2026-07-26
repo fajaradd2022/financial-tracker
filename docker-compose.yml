@@ -1,0 +1,99 @@
+# Financial Tracker — susunan produksi
+#
+# Lokal / VPS manual:
+#   cp .env.example .env   # isi kredensialnya
+#   docker compose up -d --build
+#
+# Coolify: variabel diisi lewat UI-nya, tidak perlu berkas .env.
+#
+# Variabel ditulis eksplisit di `environment:` dengan interpolasi `${...}`,
+# BUKAN lewat `env_file: .env`. Alasannya: `env_file` menuntut berkasnya ada dan
+# akan menggagalkan deploy di platform seperti Coolify yang menyuntikkan env
+# langsung ke proses. Bentuk `${...}` bekerja di keduanya — Compose otomatis
+# membaca .env di direktori proyek untuk interpolasi, dan Coolify menyediakan
+# nilainya sebagai variabel lingkungan.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: financial-tracker:latest
+    restart: unless-stopped
+
+    # SATU instance saja — jangan pernah menaikkan replika.
+    # Penjadwal polling berjalan di dalam proses aplikasi
+    # (src/instrumentation.ts), jadi dua instance berarti inbox yang sama
+    # ditarik dua kali bersamaan. SQLite juga hanya mengizinkan satu penulis.
+    deploy:
+      replicas: 1
+
+    ports:
+      # Di Coolify, baris ini boleh dihapus — proxy-nya yang mengarahkan domain
+      # ke port 3000 kontainer.
+      - "3000:3000"
+
+    environment:
+      NODE_ENV: production
+      # Database SELALU di volume. Ditulis di sini, bukan diambil dari env luar,
+      # supaya tidak mungkin tertinggal menunjuk path lain yang ikut terhapus
+      # setiap kontainer dibuat ulang.
+      DATABASE_PATH: /app/data/app.db
+
+      # --- Wajib ---
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+
+      # --- Ingestion email (opsional; kosong = ingestion mati) ---
+      GMAIL_CLIENT_ID: ${GMAIL_CLIENT_ID:-}
+      GMAIL_CLIENT_SECRET: ${GMAIL_CLIENT_SECRET:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-google/gemini-2.5-flash}
+      OWNER_ACCOUNT_NAMES: ${OWNER_ACCOUNT_NAMES:-}
+
+      # --- WhatsApp (opsional; kosong = bot mati) ---
+      # Nama service, bukan localhost: di dalam jaringan compose, "localhost"
+      # milik kontainer ini sendiri.
+      WAHA_BASE_URL: ${WAHA_BASE_URL:-http://waha:3000}
+      WAHA_API_KEY: ${WAHA_API_KEY:-}
+      WAHA_SESSION: ${WAHA_SESSION:-default}
+      WAHA_WEBHOOK_SECRET: ${WAHA_WEBHOOK_SECRET:-}
+
+      # --- Pemicu polling manual (opsional) ---
+      CRON_SECRET: ${CRON_SECRET:-}
+
+      # --- Akun admin pertama (hanya dibaca saat migrasi pertama) ---
+      OWNER_EMAIL: ${OWNER_EMAIL:-}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:-}
+      OWNER_NAME: ${OWNER_NAME:-}
+
+    volumes:
+      # Satu-satunya keadaan yang bertahan. Tanpa baris ini, seluruh data
+      # keuangan lenyap setiap kali image di-deploy ulang.
+      - app-data:/app/data
+
+  # WhatsApp HTTP API. Hapus service ini kalau tidak memakai bot WhatsApp.
+  waha:
+    image: devlikeapro/waha:latest
+    restart: unless-stopped
+
+    ports:
+      # Hanya diperlukan untuk memindai QR dari browser. Setelah sesi tersambung,
+      # boleh ditutup — aplikasi memanggil WAHA lewat jaringan internal.
+      - "3001:3000"
+
+    environment:
+      WHATSAPP_API_KEY: ${WAHA_API_KEY:-}
+      WHATSAPP_HOOK_URL: http://app:3000/api/whatsapp/webhook
+      WHATSAPP_HOOK_EVENTS: message
+      WHATSAPP_HOOK_CUSTOM_HEADERS: '[{"name":"X-Webhook-Secret","value":"${WAHA_WEBHOOK_SECRET:-}"}]'
+      WHATSAPP_RESTART_ALL_SESSIONS: "True"
+
+    volumes:
+      # Sesi WhatsApp. Tanpa ini, setiap restart menuntut scan QR ulang.
+      - waha-sessions:/app/.sessions
+
+volumes:
+  app-data:
+  waha-sessions:

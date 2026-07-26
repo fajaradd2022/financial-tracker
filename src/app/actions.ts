@@ -22,10 +22,16 @@ import type {
  * sendiri — tidak boleh mengandalkan halaman mana yang memanggilnya.
  */
 
-async function requireSession() {
+/**
+ * Mengembalikan id user pemilik sesi.
+ *
+ * userId SELALU berasal dari sini, tidak pernah dari argumen action. Argumen
+ * dikirim dari browser dan bisa dipalsukan; sesi tidak.
+ */
+async function requireUserId(): Promise<string> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) throw new Error("Tidak terautentikasi.");
-  return session;
+  return session.user.id;
 }
 
 /** Semua halaman berbagi data yang sama, jadi cukup segarkan dari root. */
@@ -37,9 +43,9 @@ function refreshAll() {
 // Transaksi
 // ---------------------------------------------------------------------------
 
-export async function createTransactionAction(input: Omit<Transaction, "id">) {
-  await requireSession();
-  const id = await repo.insertTransaction(input);
+export async function createTransactionAction(input: repo.NewTransactionInput) {
+  const userId = await requireUserId();
+  const id = await repo.insertTransaction(userId, input);
   refreshAll();
   return id;
 }
@@ -48,14 +54,14 @@ export async function updateTransactionAction(
   id: string,
   patch: Partial<Omit<Transaction, "id">>,
 ) {
-  await requireSession();
-  await repo.updateTransaction(id, patch);
+  const userId = await requireUserId();
+  await repo.updateTransaction(userId, id, patch);
   refreshAll();
 }
 
 export async function deleteTransactionAction(id: string) {
-  await requireSession();
-  await repo.deleteTransaction(id);
+  const userId = await requireUserId();
+  await repo.deleteTransaction(userId, id);
   refreshAll();
 }
 
@@ -64,8 +70,8 @@ export async function deleteTransactionAction(id: string) {
 // ---------------------------------------------------------------------------
 
 export async function createCategoryAction(input: Omit<Category, "id">) {
-  await requireSession();
-  await repo.insertCategory(input);
+  const userId = await requireUserId();
+  await repo.insertCategory(userId, input);
   refreshAll();
 }
 
@@ -73,14 +79,14 @@ export async function updateCategoryAction(
   id: string,
   patch: Partial<Omit<Category, "id">>,
 ) {
-  await requireSession();
-  await repo.updateCategory(id, patch);
+  const userId = await requireUserId();
+  await repo.updateCategory(userId, id, patch);
   refreshAll();
 }
 
 export async function deleteCategoryAction(id: string) {
-  await requireSession();
-  await repo.deleteCategory(id);
+  const userId = await requireUserId();
+  await repo.deleteCategory(userId, id);
   refreshAll();
 }
 
@@ -89,8 +95,8 @@ export async function deleteCategoryAction(id: string) {
 // ---------------------------------------------------------------------------
 
 export async function createOwnAccountAction(input: Omit<OwnAccount, "id">) {
-  await requireSession();
-  await repo.insertOwnAccount(input);
+  const userId = await requireUserId();
+  await repo.insertOwnAccount(userId, input);
   refreshAll();
 }
 
@@ -98,14 +104,14 @@ export async function updateOwnAccountAction(
   id: string,
   patch: Partial<Omit<OwnAccount, "id">>,
 ) {
-  await requireSession();
-  await repo.updateOwnAccount(id, patch);
+  const userId = await requireUserId();
+  await repo.updateOwnAccount(userId, id, patch);
   refreshAll();
 }
 
 export async function deleteOwnAccountAction(id: string) {
-  await requireSession();
-  await repo.deleteOwnAccount(id);
+  const userId = await requireUserId();
+  await repo.deleteOwnAccount(userId, id);
   refreshAll();
 }
 
@@ -116,8 +122,8 @@ export async function deleteOwnAccountAction(id: string) {
 export async function createCashEntryAction(
   input: Omit<CashWalletEntry, "id">,
 ) {
-  await requireSession();
-  await repo.insertCashEntry(input);
+  const userId = await requireUserId();
+  await repo.insertCashEntry(userId, input);
   refreshAll();
 }
 
@@ -125,14 +131,14 @@ export async function updateCashEntryAction(
   id: string,
   patch: Partial<Omit<CashWalletEntry, "id">>,
 ) {
-  await requireSession();
-  await repo.updateCashEntry(id, patch);
+  const userId = await requireUserId();
+  await repo.updateCashEntry(userId, id, patch);
   refreshAll();
 }
 
 export async function deleteCashEntryAction(id: string) {
-  await requireSession();
-  await repo.deleteCashEntry(id);
+  const userId = await requireUserId();
+  await repo.deleteCashEntry(userId, id);
   refreshAll();
 }
 
@@ -143,8 +149,8 @@ export async function deleteCashEntryAction(id: string) {
 export async function createWhatsAppNumberAction(
   input: Omit<WhatsAppNumber, "id">,
 ) {
-  await requireSession();
-  await repo.insertWhatsAppNumber(input);
+  const userId = await requireUserId();
+  await repo.insertWhatsAppNumber(userId, input);
   refreshAll();
 }
 
@@ -152,21 +158,21 @@ export async function updateWhatsAppNumberAction(
   id: string,
   patch: Partial<Omit<WhatsAppNumber, "id">>,
 ) {
-  await requireSession();
-  await repo.updateWhatsAppNumber(id, patch);
+  const userId = await requireUserId();
+  await repo.updateWhatsAppNumber(userId, id, patch);
   refreshAll();
 }
 
 export async function deleteWhatsAppNumberAction(id: string) {
-  await requireSession();
-  await repo.deleteWhatsAppNumber(id);
+  const userId = await requireUserId();
+  await repo.deleteWhatsAppNumber(userId, id);
   refreshAll();
 }
 
 export async function updateIngestionConfigAction(
   patch: Partial<IngestionConfig>,
 ) {
-  await requireSession();
-  await repo.updateIngestionConfig(patch);
+  const userId = await requireUserId();
+  await repo.updateIngestionConfig(userId, patch);
   refreshAll();
 }

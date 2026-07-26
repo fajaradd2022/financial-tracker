@@ -21,9 +21,13 @@ import {
 } from "@/app/actions";
 import { dayKey } from "./format";
 import { isInPeriod, type Period } from "./period";
+import type { NewTransactionInput } from "@/db/repositories";
 import type {
   CashWalletEntry,
   Category,
+  Collaboration,
+  CollaborationEntry,
+  CollaborationSummary,
   IngestionConfig,
   OwnAccount,
   SourceHealth,
@@ -51,6 +55,11 @@ export interface AppData {
   waNumbers: WhatsAppNumber[];
   sourceHealth: SourceHealth[];
   ingestion: IngestionConfig;
+  collaborations: Collaboration[];
+  collaborationEntries: CollaborationEntry[];
+  collaborationSummaries: CollaborationSummary[];
+  /** Id user yang sedang login — dipakai membedakan arah entri kolaborasi. */
+  currentUserId: string;
   /**
    * Nama pemilik rekening untuk pencocokan nama cadangan. Diturunkan dari env
    * di sisi server — data pribadi yang tidak layak ditanam di kode maupun
@@ -67,7 +76,7 @@ interface StoreValue extends AppData {
 
   updateTransaction: (id: string, patch: Partial<Transaction>) => void;
   deleteTransaction: (id: string) => void;
-  addTransaction: (tx: Omit<Transaction, "id">) => void;
+  addTransaction: (tx: NewTransactionInput) => void;
 
   addCategory: (input: Omit<Category, "id">) => void;
   updateCategory: (id: string, patch: Partial<Category>) => void;

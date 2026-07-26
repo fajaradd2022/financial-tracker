@@ -66,9 +66,22 @@ export interface Transaction {
   internalTransferMatchType: InternalMatchType | null;
   needsReview: boolean;
   reviewReason: ReviewReason | null;
+
+  /**
+   * Diisi penerima dana untuk menandai "belanja ini dibayar dari dana
+   * kolaborasi". Satu-satunya cara angka "terpakai" bisa terisi, karena uang di
+   * rekening sudah bercampur dan sistem tidak bisa menebaknya sendiri.
+   */
+  fundedByCollaborationId: string | null;
 }
 
 export type CategoryKind = "expense" | "income";
+
+/** Kategori yang dipakai otomatis oleh aturan tetap, dikenali kode lewat kunci ini. */
+export type CategorySystemKey =
+  | "cash_expense"
+  | "collaboration_in"
+  | "collaboration_out";
 
 export interface Category {
   id: string;
@@ -76,16 +89,21 @@ export interface Category {
   kind: CategoryKind;
   /** Kategori sistem (mis. "Cash Expense") tidak boleh dihapus/diubah nama. */
   isSystem: boolean;
+  systemKey: CategorySystemKey | null;
   /** Soft-delete: dinonaktifkan, bukan dihapus, agar transaksi lama tetap berlabel. */
   isActive: boolean;
   sortOrder: number;
 }
 
-export type AccountOwner = "husband" | "wife";
-
+/**
+ * Rekening milik user itu sendiri.
+ *
+ * Sejak aplikasi jadi multi-tenant, rekening pasangan tidak lagi masuk sini —
+ * pasangan adalah tenant terpisah, dan transfer ke sana adalah pengeluaran
+ * sungguhan yang ditangani fitur kolaborasi.
+ */
 export interface OwnAccount {
   id: string;
-  owner: AccountOwner;
   bank: BankSource;
   /** Nomor rekening, atau nomor HP untuk e-wallet. */
   accountNumberOrIdentifier: string;
@@ -109,6 +127,65 @@ export interface CashWalletEntry {
   note: string | null;
   occurredAt: string;
   origin: TransactionOrigin;
+}
+
+// ---------------------------------------------------------------------------
+// Kolaborasi
+// ---------------------------------------------------------------------------
+
+export type CollaborationStatus = "pending" | "accepted" | "revoked";
+
+export type CollaborationEntryStatus =
+  | "pending_match"
+  | "linked"
+  | "accepted"
+  | "rejected";
+
+/** Hubungan kolaborasi dilihat dari sudut pandang satu user. */
+export interface Collaboration {
+  id: string;
+  status: CollaborationStatus;
+  /** true kalau user inilah yang mengirim undangan. */
+  isRequester: boolean;
+  partnerUserId: string;
+  partnerName: string;
+  partnerEmail: string;
+  createdAt: string;
+}
+
+export interface CollaborationEntry {
+  id: string;
+  collaborationId: string;
+  fromUserId: string;
+  toUserId: string;
+  amount: number;
+  occurredAt: string;
+  note: string | null;
+  status: CollaborationEntryStatus;
+  senderTransactionId: string | null;
+  recipientTransactionId: string | null;
+}
+
+/**
+ * Ringkasan satu kantong kolaborasi.
+ *
+ * Ini SATU-SATUNYA bentuk data lintas-tenant yang boleh menyeberang: pemberi
+ * hanya menerima tiga angka, tidak pernah baris transaksi penerima.
+ */
+export interface CollaborationSummary {
+  collaborationId: string;
+  partnerName: string;
+  partnerEmail: string;
+  /** "out" = user memberi ke partner, "in" = user menerima dari partner. */
+  direction: "in" | "out";
+  /** Total dana yang sudah dikaitkan/diterima. */
+  total: number;
+  /** Total yang sudah ditandai terpakai oleh penerima. */
+  spent: number;
+  /** total − spent. Akumulatif lintas periode. */
+  remaining: number;
+  /** Entri yang masih menunggu dicocokkan penerima. */
+  pendingCount: number;
 }
 
 export interface WhatsAppNumber {

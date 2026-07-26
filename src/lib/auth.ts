@@ -48,6 +48,62 @@ const baseOptions = {
     disableSignUp: true,
     minPasswordLength: 8,
   },
+  databaseHooks: {
+    user: {
+      create: {
+        /**
+         * Menyiapkan data awal akun (kategori, status sumber, konfigurasi
+         * ingestion) tepat setelah user dibuat.
+         *
+         * Dipasang sebagai database hook, bukan dipanggil dari halaman admin,
+         * supaya SEMUA jalur pembuatan user ikut terjaring — halaman admin,
+         * skrip seed, dan (nanti) pendaftaran mandiri. Tanpa ini akun baru
+         * tidak punya kategori sama sekali dan halaman transaksinya tidak bisa
+         * dipakai.
+         */
+        after: async (user) => {
+          const { provisionNewUser, upsertUserDirectory } = await import(
+            "@/db/repositories"
+          );
+          await provisionNewUser(user.id);
+          await upsertUserDirectory(
+            user.id,
+            user.name,
+            user.email.toLowerCase(),
+          );
+        },
+      },
+      update: {
+        /**
+         * Menjaga direktori tetap sinkron saat nama/email berubah — kalau tidak,
+         * daftar kolaborator perlahan menampilkan identitas yang usang.
+         */
+        after: async (user) => {
+          if (!user.id || !user.email || !user.name) return;
+          const { upsertUserDirectory } = await import("@/db/repositories");
+          await upsertUserDirectory(
+            user.id,
+            user.name,
+            user.email.toLowerCase(),
+          );
+        },
+      },
+      delete: {
+        /**
+         * Membersihkan seluruh data keuangan milik user yang dihapus.
+         *
+         * Dikerjakan eksplisit karena tabel `user` milik Better Auth tidak
+         * dideklarasikan di skema Drizzle, jadi tidak ada foreign key yang bisa
+         * melakukan ON DELETE CASCADE. Tanpa ini, menghapus akun menyisakan
+         * data keuangannya menggantung selamanya.
+         */
+        after: async (user) => {
+          const { deleteAllUserData } = await import("@/db/repositories");
+          await deleteAllUserData(user.id);
+        },
+      },
+    },
+  },
   plugins: [
     // Memakai peran bawaan plugin: "admin" (boleh mengelola pengguna) dan
     // "user" (hanya memakai aplikasi). Peran kustom butuh definisi access

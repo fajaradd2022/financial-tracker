@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { pollGmailOnce } from "@/lib/ingestion/poll-gmail";
+import { pollAllUsers } from "@/lib/ingestion/poll-gmail";
 
 /**
- * Pemicu polling manual.
+ * Pemicu polling manual untuk seluruh user.
  *
  * Penjadwal utama berjalan di dalam proses (lihat `instrumentation.ts`).
  * Endpoint ini ada untuk dua hal: menguji ingestion sesuai permintaan, dan
@@ -10,7 +10,8 @@ import { pollGmailOnce } from "@/lib/ingestion/poll-gmail";
  * (misalnya karena aplikasi dideploy dengan cara yang mematikan timer).
  *
  * Dilindungi shared secret, bukan sesi login, karena pemanggilnya adalah mesin
- * (curl/cron sistem) yang tidak punya cookie.
+ * (curl/cron sistem) yang tidak punya cookie — dan karena ia menarik inbox
+ * semua user, bukan milik satu orang.
  */
 export async function POST(request: Request) {
   const expected = process.env.CRON_SECRET;
@@ -28,6 +29,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Tidak diizinkan." }, { status: 401 });
   }
 
-  const result = await pollGmailOnce();
-  return NextResponse.json(result);
+  const results = await pollAllUsers();
+  return NextResponse.json({ users: results.length, results });
 }

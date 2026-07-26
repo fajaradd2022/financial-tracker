@@ -1,6 +1,6 @@
 /**
  * Menyiapkan seluruh database: migrasi tabel aplikasi (Drizzle), migrasi tabel
- * Better Auth, seed data awal, dan akun admin pertama.
+ * Better Auth, akun admin pertama, dan data awal untuk setiap user.
  *
  * Jalankan: `npm run db:setup`
  *
@@ -10,18 +10,8 @@
 import { betterAuth } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import { sql } from "drizzle-orm";
 import { createDb, DB_PATH, openDatabase } from "../src/db/connection";
-import {
-  categories,
-  ingestionConfig,
-  sourceHealth,
-} from "../src/db/schema";
-import {
-  SEED_CATEGORIES,
-  SEED_INGESTION_CONFIG,
-  SEED_SOURCE_HEALTH,
-} from "../src/db/seed-data";
+import { provisionNewUser } from "../src/db/repositories";
 import { authOptions, seedAuthOptions } from "../src/lib/auth";
 
 const OWNER_EMAIL = process.env.OWNER_EMAIL ?? "itopscitius@gmail.com";
@@ -50,59 +40,7 @@ async function main() {
     console.log("✓ Tabel auth sudah terbaru.");
   }
 
-  // 3. Kategori — dilewati kalau sudah ada, agar perubahan user tidak tertimpa
-  const [{ count: categoryCount }] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(categories);
-
-  if (categoryCount === 0) {
-    await db.insert(categories).values(
-      SEED_CATEGORIES.map((c) => ({
-        name: c.name,
-        kind: c.kind,
-        sortOrder: c.sortOrder,
-        isSystem: "isSystem" in c ? c.isSystem : false,
-      })),
-    );
-    console.log(`✓ ${SEED_CATEGORIES.length} kategori awal dibuat.`);
-  } else {
-    console.log(`✓ Kategori sudah ada (${categoryCount}) — dilewati.`);
-  }
-
-  // 4. Status sumber
-  const [{ count: healthCount }] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(sourceHealth);
-
-  if (healthCount === 0) {
-    await db.insert(sourceHealth).values(
-      SEED_SOURCE_HEALTH.map((s) => ({
-        source: s.source,
-        emailSupported: s.emailSupported,
-        note: s.note,
-      })),
-    );
-    console.log("✓ Status sumber transaksi disiapkan.");
-  } else {
-    console.log("✓ Status sumber sudah ada — dilewati.");
-  }
-
-  // 5. Konfigurasi ingestion (baris tunggal)
-  const [{ count: configCount }] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(ingestionConfig);
-
-  if (configCount === 0) {
-    await db.insert(ingestionConfig).values({
-      id: "singleton",
-      ...SEED_INGESTION_CONFIG,
-    });
-    console.log("✓ Konfigurasi ingestion dibuat (masih dimatikan).");
-  } else {
-    console.log("✓ Konfigurasi ingestion sudah ada — dilewati.");
-  }
-
-  // 6. Akun admin pertama
+  // 3. Akun admin pertama
   const raw = openDatabase();
   const { count: userCount } = raw
     .prepare("SELECT COUNT(*) AS count FROM user")
@@ -122,8 +60,22 @@ async function main() {
     console.log(`    email    : ${OWNER_EMAIL}`);
     console.log(`    password : ${OWNER_PASSWORD}`);
   }
-  raw.close();
 
+  // 4. Data awal untuk SETIAP user — kategori, status sumber, konfigurasi
+  //    ingestion. Dijalankan untuk semua user, bukan hanya yang baru dibuat,
+  //    supaya akun yang dibuat lewat halaman admin sebelum langkah ini ada pun
+  //    ikut terisi.
+  const users = raw.prepare("SELECT id, email FROM user").all() as {
+    id: string;
+    email: string;
+  }[];
+
+  for (const user of users) {
+    await provisionNewUser(user.id);
+  }
+  console.log(`✓ Data awal disiapkan untuk ${users.length} pengguna.`);
+
+  raw.close();
   console.log("\nSelesai.");
 }
 

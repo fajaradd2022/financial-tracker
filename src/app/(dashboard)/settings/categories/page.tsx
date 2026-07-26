@@ -182,6 +182,9 @@ export default function CategoriesPage() {
             addCategory({
               ...values,
               isSystem: false,
+              // Kategori buatan user tidak pernah jadi kategori sistem —
+              // systemKey hanya dimiliki kategori bawaan yang dipakai aturan tetap.
+              systemKey: null,
               isActive: true,
               sortOrder:
                 Math.max(

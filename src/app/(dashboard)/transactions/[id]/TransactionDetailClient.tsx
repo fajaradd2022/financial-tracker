@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import {
+  markTransactionAsCollaborationAction,
+  setTransactionFundingAction,
+} from "@/app/collaboration-actions";
 import { ConfirmDialog } from "@/components/Modal";
 import { IconChevronLeft, IconTrash } from "@/components/icons";
 import {
@@ -34,9 +38,25 @@ import { useStore } from "@/lib/store";
 
 export function TransactionDetailClient({ id }: { id: string }) {
   const router = useRouter();
-  const { transactions, categories, updateTransaction, deleteTransaction } =
-    useStore();
+  const {
+    transactions,
+    categories,
+    collaborations,
+    collaborationEntries,
+    updateTransaction,
+    deleteTransaction,
+  } = useStore();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [collabError, setCollabError] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+
+  function run(action: () => Promise<{ ok: boolean; message?: string }>) {
+    startTransition(async () => {
+      const result = await action();
+      setCollabError(result.ok ? null : (result.message ?? "Gagal."));
+      router.refresh();
+    });
+  }
 
   const transaction = transactions.find((t) => t.id === id);
 
@@ -61,6 +81,15 @@ export function TransactionDetailClient({ id }: { id: string }) {
   // pemasukan, dan kategori nonaktif tidak ditawarkan lagi untuk pilihan baru.
   const selectableCategories = categories.filter(
     (c) => c.kind === (isIncome ? "income" : "expense") && c.isActive,
+  );
+
+  const activeCollaborations = collaborations.filter(
+    (c) => c.status === "accepted",
+  );
+  // Entri yang sudah pernah dibuat dari transaksi ini — supaya satu pengeluaran
+  // tidak bisa ditandai dua kali dan menghasilkan dua entri di sisi penerima.
+  const sentEntry = collaborationEntries.find(
+    (e) => e.senderTransactionId === transaction.id,
   );
 
   return (
@@ -273,6 +302,101 @@ export function TransactionDetailClient({ id }: { id: string }) {
         </Card>
       </div>
 
+      {activeCollaborations.length > 0 ? (
+        <Card>
+          <CardHeader
+            title="Kolaborasi"
+            description="Menghubungkan transaksi ini dengan dana kolaborator"
+          />
+          <div className="space-y-4 px-5 py-4">
+            {transaction.direction === "out" ? (
+              <>
+                <Field
+                  label="Dibayar dari dana kolaborasi"
+                  hint="Pilih kalau belanja ini memakai uang yang diberikan kolaborator. Inilah yang mengisi angka “terpakai” di sisi pemberi."
+                >
+                  <Select
+                    value={transaction.fundedByCollaborationId ?? ""}
+                    onChange={(e) =>
+                      run(() =>
+                        setTransactionFundingAction(
+                          transaction.id,
+                          e.target.value || null,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="">— Uang sendiri —</option>
+                    {activeCollaborations.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        Dana dari {c.partnerName}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+
+                {sentEntry ? (
+                  <p className="rounded-lg bg-surface-muted px-3 py-2 text-xs text-muted">
+                    Sudah ditandai sebagai dana yang diberikan ke{" "}
+                    <strong className="text-foreground">
+                      {collaborations.find(
+                        (c) => c.id === sentEntry.collaborationId,
+                      )?.partnerName ?? "kolaborator"}
+                    </strong>
+                    . Menunggu dia mengaitkan atau menerimanya.
+                  </p>
+                ) : (
+                  <Field
+                    label="Tandai sebagai dana yang diberikan"
+                    hint="Di sisi penerima akan muncul entri menunggu — belum menambah angka apa pun sampai dia mengaitkan atau menerimanya."
+                  >
+                    <Select
+                      value=""
+                      onChange={(e) => {
+                        if (!e.target.value) return;
+                        run(() =>
+                          markTransactionAsCollaborationAction(
+                            transaction.id,
+                            e.target.value,
+                          ),
+                        );
+                      }}
+                    >
+                      <option value="">— Pilih kolaborator —</option>
+                      {activeCollaborations.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          Diberikan ke {c.partnerName}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-muted">
+                Transaksi masuk dikaitkan ke dana kolaborasi dari halaman{" "}
+                <Link
+                  href="/collaboration"
+                  className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                >
+                  Kolaborasi
+                </Link>
+                , supaya pasangannya bisa dipilih dari daftar dana yang menunggu.
+              </p>
+            )}
+
+            {collabError ? (
+              <p
+                role="alert"
+                className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:bg-rose-500/10 dark:text-rose-300"
+              >
+                {collabError}
+              </p>
+            ) : null}
+          </div>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader
           title="Data mentah"
@@ -296,7 +420,7 @@ export function TransactionDetailClient({ id }: { id: string }) {
           {transaction.rawEmailSnippet ? (
             <div className="sm:col-span-2">
               <dt className="text-[11px] text-muted">Cuplikan email</dt>
-              <dd className="mt-1 rounded-lg bg-surface-muted px-3 py-2 font-mono text-[11px] leading-relaxed break-words">
+              <dd className="mt-1 rounded-lg bg-surface-muted px-3 py-2 font-mono text-[11px] leading-relaxed wrap-break-word">
                 {transaction.rawEmailSnippet}
               </dd>
             </div>
@@ -336,7 +460,7 @@ function Detail({
   return (
     <div>
       <dt className="text-[11px] text-muted">{label}</dt>
-      <dd className="mt-0.5 text-xs break-words">{children}</dd>
+      <dd className="mt-0.5 text-xs wrap-break-word">{children}</dd>
     </div>
   );
 }

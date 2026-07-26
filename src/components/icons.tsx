@@ -86,6 +86,13 @@ export const IconUsers = (p: IconProps) => (
   </Svg>
 );
 
+export const IconKey = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="8" cy="15" r="4" />
+    <path d="m10.8 12.2 8.2-8.2M17 6l2 2M14 9l2 2" />
+  </Svg>
+);
+
 export const IconDownload = (p: IconProps) => (
   <Svg {...p}>
     <path d="M12 3v12M8 11l4 4 4-4" />

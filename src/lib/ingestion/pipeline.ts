@@ -1,14 +1,11 @@
-import { eq } from "drizzle-orm";
-import { db } from "@/db/connection";
 import * as repo from "@/db/repositories";
-import { syncState, transactions } from "@/db/schema";
 import { isCashWithdrawal, withdrawalCreditFor } from "@/lib/domain/cash-wallet";
 import { matchInternalTransfer } from "@/lib/domain/internal-transfer";
 import type { GmailMessage } from "@/lib/gmail/client";
 import { resolveSource } from "@/lib/gmail/source-mapping";
 import {
   categorizeTransaction,
-  findCashExpenseCategory,
+  findSystemCategory,
 } from "@/lib/llm/categorize";
 import { extractTransaction, type CompletionFn } from "@/lib/llm/extract";
 import type { ReviewReason, Transaction } from "@/lib/types";
@@ -22,6 +19,9 @@ import type { ReviewReason, Transaction } from "@/lib/types";
  * ber-confidence rendah dan ditandai perlu direview, karena transaksi yang
  * tercatat salah masih bisa dilihat dan dikoreksi, sedangkan transaksi yang
  * tidak pernah muncul tidak akan pernah disadari hilang.
+ *
+ * Semuanya berjalan dalam konteks satu user — `userId` diteruskan ke setiap
+ * pemanggilan repository, tidak ada kueri global.
  */
 
 export const SYNC_CURSOR_KEY = "gmail:last_polled_at";
@@ -35,6 +35,8 @@ export interface IngestOutcome {
 export interface IngestDeps {
   /** Disuntik saat pengujian agar pipeline diuji tanpa memanggil API LLM. */
   completion?: CompletionFn;
+  /** Nama pemilik rekening untuk pencocokan nama cadangan. */
+  ownerNames?: string[];
 }
 
 /** Cuplikan isi email untuk audit — cukup untuk mengenali, tanpa menggemukkan DB. */
@@ -42,32 +44,25 @@ function snippet(body: string): string {
   return body.replace(/\s+/g, " ").trim().slice(0, 500);
 }
 
-async function alreadyIngested(gmailMessageId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ id: transactions.id })
-    .from(transactions)
-    .where(eq(transactions.gmailMessageId, gmailMessageId));
-  return Boolean(row);
-}
-
 /**
- * Memproses satu email Gmail menjadi transaksi.
+ * Memproses satu email Gmail menjadi transaksi milik `userId`.
  *
- * Aman dipanggil ulang untuk email yang sama: pemeriksaan `alreadyIngested`
- * plus unique constraint `gmail_message_id` di database membuat polling yang
+ * Aman dipanggil ulang untuk email yang sama: pemeriksaan idempotensi plus
+ * unique constraint `(user_id, gmail_message_id)` membuat polling yang
  * jendelanya tumpang tindih tidak menghasilkan duplikat.
  */
 export async function ingestMessage(
+  userId: string,
   message: GmailMessage,
   deps: IngestDeps = {},
 ): Promise<IngestOutcome> {
-  if (await alreadyIngested(message.id)) {
+  if (await repo.transactionExistsForMessage(userId, message.id)) {
     return { status: "skipped_duplicate" };
   }
 
   const source = resolveSource(message.senderAddress) ?? "manual_other";
 
-  const { result, raw, error } = await extractTransaction(
+  const { result, error } = await extractTransaction(
     {
       source,
       senderAddress: message.senderAddress,
@@ -80,7 +75,7 @@ export async function ingestMessage(
   // Email non-transaksi (promosi, OTP) memang tidak perlu jadi baris apa pun.
   // Ini satu-satunya kasus di mana email sengaja dibuang.
   if (result.isTransactionEmail && !error && result.amount && result.direction) {
-    return insertExtracted(message, source, result, raw, deps);
+    return insertExtracted(userId, message, source, result, deps);
   }
 
   if (!result.isTransactionEmail && !error) {
@@ -92,7 +87,7 @@ export async function ingestMessage(
     ? new Date(result.occurredAt).toISOString()
     : new Date(Number(message.internalDate)).toISOString();
 
-  const id = await repo.insertTransaction({
+  const id = await repo.insertTransaction(userId, {
     source,
     direction: result.direction ?? "out",
     amount: result.amount ?? 0,
@@ -119,6 +114,7 @@ export async function ingestMessage(
 }
 
 async function insertExtracted(
+  userId: string,
   message: GmailMessage,
   source: Transaction["source"],
   result: {
@@ -130,12 +126,11 @@ async function insertExtracted(
     rawTransactionType: string | null;
     confidence: "high" | "low";
   },
-  raw: string | null,
   deps: IngestDeps,
 ): Promise<IngestOutcome> {
   const [ownAccounts, categories] = await Promise.all([
-    repo.listOwnAccounts(),
-    repo.listCategories(),
+    repo.listOwnAccounts(userId),
+    repo.listCategories(userId),
   ]);
 
   const direction = result.direction!;
@@ -144,12 +139,14 @@ async function insertExtracted(
     ? new Date(result.occurredAt).toISOString()
     : new Date(Number(message.internalDate)).toISOString();
 
-  // 1. Transfer antar rekening sendiri — aturan produk yang paling menentukan.
+  // 1. Transfer antar rekening SENDIRI — cakupannya kini hanya rekening milik
+  //    user ini. Rekening pasangan/kolaborator sudah tidak masuk sini, jadi
+  //    transfer ke sana memang terhitung pengeluaran.
   const internal = matchInternalTransfer({
     counterpartyAccountNumber: result.counterpartyAccountNumber,
     counterpartyName: result.counterpartyName,
     ownAccounts,
-    ownerNames: ownerNamesFromEnv(),
+    ownerNames: deps.ownerNames ?? ownerNamesFromEnv(),
   });
 
   // 2. Kategori.
@@ -167,7 +164,7 @@ async function insertExtracted(
     categoryId = null;
   } else if (withdrawal) {
     // Aturan tetap: tarik tunai selalu "Cash Expense". Tidak perlu LLM.
-    categoryId = findCashExpenseCategory(categories)?.id ?? null;
+    categoryId = findSystemCategory(categories, "cash_expense")?.id ?? null;
   } else {
     const categorized = await categorizeTransaction(
       {
@@ -190,7 +187,7 @@ async function insertExtracted(
   else if (categoryNeedsReview || (!categoryId && !internal.isInternal))
     reviewReason = "uncategorized";
 
-  const transactionId = await repo.insertTransaction({
+  const transactionId = await repo.insertTransaction(userId, {
     source,
     direction,
     amount,
@@ -213,6 +210,7 @@ async function insertExtracted(
   //    memindahkan dana antar rekening sendiri bukan penarikan uang fisik.
   if (withdrawal && !internal.isInternal) {
     await repo.insertCashEntry(
+      userId,
       withdrawalCreditFor({
         id: transactionId,
         amount,
@@ -222,39 +220,19 @@ async function insertExtracted(
     );
   }
 
-  void raw;
   return { status: "inserted", transactionId };
 }
 
 /**
  * Nama pemilik rekening untuk pencocokan nama cadangan.
- * Diisi lewat env karena ini data pribadi yang tidak layak ditanam di kode.
+ *
+ * Masih dari env sebagai nilai awal bersama; saat Fase C nanti tiap user punya
+ * profilnya sendiri, sumbernya pindah ke database dan parameter `ownerNames`
+ * di `IngestDeps` yang dipakai.
  */
 export function ownerNamesFromEnv(): string[] {
   return (process.env.OWNER_ACCOUNT_NAMES ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-}
-
-// ---------------------------------------------------------------------------
-// Kursor polling
-// ---------------------------------------------------------------------------
-
-export async function readSyncCursor(): Promise<string | null> {
-  const [row] = await db
-    .select({ value: syncState.value })
-    .from(syncState)
-    .where(eq(syncState.key, SYNC_CURSOR_KEY));
-  return row?.value ?? null;
-}
-
-export async function writeSyncCursor(value: string) {
-  await db
-    .insert(syncState)
-    .values({ key: SYNC_CURSOR_KEY, value })
-    .onConflictDoUpdate({
-      target: syncState.key,
-      set: { value, updatedAt: new Date().toISOString() },
-    });
 }

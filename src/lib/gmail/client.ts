@@ -20,30 +20,43 @@ export class GmailError extends Error {
   }
 }
 
-export function hasGmailCredentials(): boolean {
-  return Boolean(
-    process.env.GMAIL_CLIENT_ID &&
-      process.env.GMAIL_CLIENT_SECRET &&
-      process.env.GMAIL_REFRESH_TOKEN,
-  );
+/** OAuth app milik pemilik instalasi — satu untuk semua user. */
+export function hasOAuthAppCredentials(): boolean {
+  return Boolean(process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET);
 }
 
-// Access token berlaku ~1 jam. Di-cache di memori supaya satu putaran polling
-// tidak menukar token berulang kali untuk tiap pesan.
-let cachedToken: { value: string; expiresAt: number } | null = null;
+/**
+ * Cache access token, **dikunci per user**.
+ *
+ * Sebelumnya ini satu variabel modul. Di aplikasi single-user itu benar, tapi
+ * begitu multi-tenant, token user yang kebetulan menyegarkan lebih dulu akan
+ * dipakai menarik inbox user berikutnya — artinya email orang lain masuk ke
+ * buku yang salah. Kunci per user adalah yang mencegah itu.
+ *
+ * Access token Gmail berlaku ~1 jam; cache-nya supaya satu putaran polling
+ * tidak menukar token berulang kali untuk tiap pesan.
+ */
+const tokenCache = new Map<string, { value: string; expiresAt: number }>();
 
-async function getAccessToken(): Promise<string> {
-  if (cachedToken && cachedToken.expiresAt > Date.now() + 60_000) {
-    return cachedToken.value;
-  }
+/** Dipakai pengujian & saat kredensial dicabut. */
+export function clearAccessTokenCache(userId?: string) {
+  if (userId) tokenCache.delete(userId);
+  else tokenCache.clear();
+}
+
+export async function getAccessToken(
+  userId: string,
+  refreshToken: string,
+): Promise<string> {
+  const cached = tokenCache.get(userId);
+  if (cached && cached.expiresAt > Date.now() + 60_000) return cached.value;
 
   const clientId = process.env.GMAIL_CLIENT_ID;
   const clientSecret = process.env.GMAIL_CLIENT_SECRET;
-  const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
 
-  if (!clientId || !clientSecret || !refreshToken) {
+  if (!clientId || !clientSecret) {
     throw new GmailError(
-      "Kredensial Gmail belum lengkap. Lihat .env.example (GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN).",
+      "GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET belum diisi di .env.",
     );
   }
 
@@ -70,15 +83,28 @@ async function getAccessToken(): Promise<string> {
     expires_in: number;
   };
 
-  cachedToken = {
+  tokenCache.set(userId, {
     value: payload.access_token,
     expiresAt: Date.now() + payload.expires_in * 1000,
-  };
-  return cachedToken.value;
+  });
+  return payload.access_token;
 }
 
-async function gmailFetch<T>(path: string): Promise<T> {
-  const token = await getAccessToken();
+/**
+ * Identitas satu koneksi Gmail. Diteruskan eksplisit ke setiap panggilan,
+ * bukan diambil dari variabel global — supaya tidak mungkin ada jalur yang
+ * "lupa" user mana yang sedang ditarik.
+ */
+export interface GmailSession {
+  userId: string;
+  refreshToken: string;
+}
+
+async function gmailFetch<T>(
+  session: GmailSession,
+  path: string,
+): Promise<T> {
+  const token = await getAccessToken(session.userId, session.refreshToken);
   const response = await fetch(`${GMAIL_API}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -99,6 +125,7 @@ export interface GmailMessageSummary {
 
 /** Mencari pesan dengan kueri Gmail (sintaks yang sama seperti kotak pencarian). */
 export async function listMessages(
+  session: GmailSession,
   query: string,
   maxResults = 50,
 ): Promise<GmailMessageSummary[]> {
@@ -107,6 +134,7 @@ export async function listMessages(
     maxResults: String(maxResults),
   });
   const data = await gmailFetch<{ messages?: GmailMessageSummary[] }>(
+    session,
     `/messages?${params}`,
   );
   return data.messages ?? [];
@@ -176,12 +204,15 @@ function extractBody(part: RawPart | undefined): string {
   return "";
 }
 
-export async function getMessage(id: string): Promise<GmailMessage> {
+export async function getMessage(
+  session: GmailSession,
+  id: string,
+): Promise<GmailMessage> {
   const data = await gmailFetch<{
     id: string;
     internalDate: string;
     payload?: RawPart & { headers?: { name: string; value: string }[] };
-  }>(`/messages/${id}?format=full`);
+  }>(session, `/messages/${id}?format=full`);
 
   const headers = data.payload?.headers ?? [];
   const header = (name: string) =>

@@ -26,6 +26,10 @@ export default async function DashboardLayout({
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/login");
 
+  // Seluruh data disaring ke pemilik sesi. Ini satu-satunya tempat `userId`
+  // untuk jalur baca ditentukan — halaman tidak pernah memilih user sendiri.
+  const userId = session.user.id;
+
   const [
     transactions,
     categories,
@@ -34,14 +38,20 @@ export default async function DashboardLayout({
     waNumbers,
     sourceHealth,
     ingestion,
+    collaborations,
+    collaborationEntries,
+    collaborationSummaries,
   ] = await Promise.all([
-    repo.listTransactions(),
-    repo.listCategories(),
-    repo.listOwnAccounts(),
-    repo.listCashEntries(),
-    repo.listWhatsAppNumbers(),
-    repo.listSourceHealth(),
-    repo.getIngestionConfig(),
+    repo.listTransactions(userId),
+    repo.listCategories(userId),
+    repo.listOwnAccounts(userId),
+    repo.listCashEntries(userId),
+    repo.listWhatsAppNumbers(userId),
+    repo.listSourceHealth(userId),
+    repo.getIngestionConfig(userId),
+    repo.listCollaborations(userId),
+    repo.listCollaborationEntries(userId),
+    repo.getCollaborationSummaries(userId),
   ]);
 
   return (
@@ -54,6 +64,10 @@ export default async function DashboardLayout({
         waNumbers,
         sourceHealth,
         ingestion,
+        collaborations,
+        collaborationEntries,
+        collaborationSummaries,
+        currentUserId: userId,
         ownerNames: ownerNamesFromEnv(),
       }}
     >

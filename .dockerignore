@@ -1,0 +1,34 @@
+# Berkas yang TIDAK boleh masuk image.
+
+# Database. Ini yang paling penting: tanpa baris ini, database pengembangan —
+# berikut seluruh transaksi dan hash password di dalamnya — ikut terpanggang ke
+# dalam image, dan setiap kontainer baru lahir membawa data orang lain.
+data
+*.db
+*.db-wal
+*.db-shm
+
+# Rahasia. Kredensial diberikan saat runtime lewat env_file, tidak pernah
+# dijahit ke dalam image (image bisa disalin, di-push, atau diinspeksi).
+.env
+.env.*
+!.env.example
+
+# Dibangun ulang di dalam image. Menyalinnya justru berbahaya: node_modules
+# host berisi binary native better-sqlite3 yang dikompilasi untuk Windows dan
+# tidak akan jalan di Linux.
+node_modules
+.next
+
+# Tidak relevan untuk menjalankan aplikasi
+.git
+.gitignore
+.claude
+.vscode
+README.md
+PRD.md
+Dockerfile
+.dockerignore
+docker-compose.yml
+npm-debug.log*
+*.tsbuildinfo

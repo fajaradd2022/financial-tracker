@@ -23,8 +23,14 @@ import {
 } from "@/lib/store";
 
 export default function DashboardPage() {
-  const { transactions, categories, cashEntries, cashBalance, categoryById } =
-    useStore();
+  const {
+    transactions,
+    categories,
+    cashEntries,
+    cashBalance,
+    categoryById,
+    collaborationSummaries,
+  } = useStore();
 
   const latest = useMemo(
     () =>
@@ -145,6 +151,66 @@ export default function DashboardPage() {
           hint="Akumulasi semua periode"
         />
       </div>
+
+      {collaborationSummaries.length > 0 ? (
+        <Card>
+          <CardHeader
+            title="Kolaborasi"
+            description="Saldo kantong akumulatif, tidak direset per periode"
+            action={
+              <Link
+                href="/collaboration"
+                className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+              >
+                Kelola
+              </Link>
+            }
+          />
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-136 text-sm">
+              <thead>
+                <tr className="border-b border-line text-left text-[11px] text-muted">
+                  <th className="px-5 py-2 font-medium">Kolaborator</th>
+                  <th className="px-3 py-2 font-medium">Arah</th>
+                  <th className="px-3 py-2 text-right font-medium">
+                    Diberi/Diterima
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium">Terpakai</th>
+                  <th className="px-5 py-2 text-right font-medium">Sisa</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {collaborationSummaries.map((s) => (
+                  <tr key={s.collaborationId}>
+                    <td className="max-w-48 truncate px-5 py-2.5 font-medium">
+                      {s.partnerName}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <Badge tone={s.direction === "out" ? "danger" : "success"}>
+                        {s.direction === "out" ? "keluar →" : "← masuk"}
+                      </Badge>
+                    </td>
+                    <td className="tabular px-3 py-2.5 text-right">
+                      <Money value={formatIDR(s.total)} />
+                    </td>
+                    <td className="tabular px-3 py-2.5 text-right">
+                      <Money value={formatIDR(s.spent)} />
+                    </td>
+                    <td
+                      className={cn(
+                        "tabular px-5 py-2.5 text-right font-semibold",
+                        s.remaining < 0 && "text-rose-600 dark:text-rose-400",
+                      )}
+                    >
+                      <Money value={formatIDR(s.remaining)} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : null}
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card>

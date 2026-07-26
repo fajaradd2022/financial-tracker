@@ -32,6 +32,7 @@ const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", Icon: IconDashboard },
   { href: "/transactions", label: "Transaksi", Icon: IconTransactions },
   { href: "/cash", label: "Dompet Tunai", Icon: IconCash },
+  { href: "/collaboration", label: "Kolaborasi", Icon: IconUsers },
   {
     href: "/settings",
     label: "Pengaturan",
@@ -49,6 +50,20 @@ export interface SessionUser {
   name: string;
   email: string;
   role?: string | null;
+}
+
+/**
+ * Lencana hanya untuk hal yang menunggu TINDAKAN user, bukan sekadar hitungan.
+ * Kalau semua menu dilencanai, lencananya berhenti berarti apa-apa.
+ */
+function badgeFor(
+  href: string,
+  reviewCount: number,
+  pendingCollab: number,
+): number | null {
+  if (href === "/transactions") return reviewCount > 0 ? reviewCount : null;
+  if (href === "/collaboration") return pendingCollab > 0 ? pendingCollab : null;
+  return null;
 }
 
 export function AppShell({
@@ -107,9 +122,13 @@ function Sidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { transactions } = useStore();
+  const { transactions, collaborationEntries, currentUserId } = useStore();
   const [signingOut, setSigningOut] = useState(false);
   const reviewCount = transactions.filter((t) => t.needsReview).length;
+  // Entri yang menunggu TINDAKAN saya — bukan yang saya kirim ke orang lain.
+  const pendingCollab = collaborationEntries.filter(
+    (e) => e.toUserId === currentUserId && e.status === "pending_match",
+  ).length;
 
   async function signOut() {
     setSigningOut(true);
@@ -161,9 +180,9 @@ function Sidebar({
               >
                 <item.Icon className="size-4 shrink-0" />
                 <span className="flex-1 truncate">{item.label}</span>
-                {item.href === "/transactions" && reviewCount > 0 ? (
+                {badgeFor(item.href, reviewCount, pendingCollab) ? (
                   <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
-                    {reviewCount}
+                    {badgeFor(item.href, reviewCount, pendingCollab)}
                   </span>
                 ) : null}
               </Link>

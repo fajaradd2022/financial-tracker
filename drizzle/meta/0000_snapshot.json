@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f287687c-4082-4b5a-847a-85643fda8b97",
+  "id": "88321d2a-2e13-4d5f-bbd3-fc6461ea0008",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "cash_wallet_entries": {
@@ -11,6 +11,13 @@
           "name": "id",
           "type": "text",
           "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
@@ -73,9 +80,10 @@
         }
       },
       "indexes": {
-        "cash_entries_occurred_at_idx": {
-          "name": "cash_entries_occurred_at_idx",
+        "cash_entries_user_occurred_at_idx": {
+          "name": "cash_entries_user_occurred_at_idx",
           "columns": [
+            "user_id",
             "occurred_at"
           ],
           "isUnique": false
@@ -123,6 +131,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "name": {
           "name": "name",
           "type": "text",
@@ -144,6 +159,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
+        },
+        "system_key": {
+          "name": "system_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "is_active": {
           "name": "is_active",
@@ -170,9 +192,17 @@
         }
       },
       "indexes": {
-        "categories_name_kind_unique": {
-          "name": "categories_name_kind_unique",
+        "categories_user_idx": {
+          "name": "categories_user_idx",
           "columns": [
+            "user_id"
+          ],
+          "isUnique": false
+        },
+        "categories_user_name_kind_unique": {
+          "name": "categories_user_name_kind_unique",
+          "columns": [
+            "user_id",
             "name",
             "kind"
           ],
@@ -187,20 +217,20 @@
     "ingestion_config": {
       "name": "ingestion_config",
       "columns": {
-        "id": {
-          "name": "id",
+        "user_id": {
+          "name": "user_id",
           "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "autoincrement": false,
-          "default": "'singleton'"
+          "autoincrement": false
         },
         "inbox_email": {
           "name": "inbox_email",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": false,
+          "default": "''"
         },
         "poll_interval_minutes": {
           "name": "poll_interval_minutes",
@@ -224,7 +254,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": true
+          "default": false
         },
         "last_polled_at": {
           "name": "last_polled_at",
@@ -257,8 +287,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "owner": {
-          "name": "owner",
+        "user_id": {
+          "name": "user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -302,16 +332,18 @@
         }
       },
       "indexes": {
-        "own_accounts_number_idx": {
-          "name": "own_accounts_number_idx",
+        "own_accounts_user_number_idx": {
+          "name": "own_accounts_user_number_idx",
           "columns": [
+            "user_id",
             "account_number_or_identifier"
           ],
           "isUnique": false
         },
-        "own_accounts_bank_number_unique": {
-          "name": "own_accounts_bank_number_unique",
+        "own_accounts_user_bank_number_unique": {
+          "name": "own_accounts_user_bank_number_unique",
           "columns": [
+            "user_id",
             "bank",
             "account_number_or_identifier"
           ],
@@ -326,10 +358,17 @@
     "source_health": {
       "name": "source_health",
       "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "source": {
           "name": "source",
           "type": "text",
-          "primaryKey": true,
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
@@ -358,17 +397,32 @@
       },
       "indexes": {},
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "source_health_user_id_source_pk": {
+          "columns": [
+            "user_id",
+            "source"
+          ],
+          "name": "source_health_user_id_source_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
     "sync_state": {
       "name": "sync_state",
       "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "key": {
           "name": "key",
           "type": "text",
-          "primaryKey": true,
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
@@ -389,7 +443,15 @@
       },
       "indexes": {},
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "sync_state_user_id_key_pk": {
+          "columns": [
+            "user_id",
+            "key"
+          ],
+          "name": "sync_state_user_id_key_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
@@ -400,6 +462,13 @@
           "name": "id",
           "type": "text",
           "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
@@ -542,33 +611,37 @@
         }
       },
       "indexes": {
-        "transactions_gmail_message_id_unique": {
-          "name": "transactions_gmail_message_id_unique",
+        "transactions_user_occurred_at_idx": {
+          "name": "transactions_user_occurred_at_idx",
           "columns": [
-            "gmail_message_id"
-          ],
-          "isUnique": true
-        },
-        "transactions_occurred_at_idx": {
-          "name": "transactions_occurred_at_idx",
-          "columns": [
+            "user_id",
             "occurred_at"
           ],
           "isUnique": false
         },
-        "transactions_needs_review_idx": {
-          "name": "transactions_needs_review_idx",
+        "transactions_user_needs_review_idx": {
+          "name": "transactions_user_needs_review_idx",
           "columns": [
+            "user_id",
             "needs_review"
           ],
           "isUnique": false
         },
-        "transactions_category_idx": {
-          "name": "transactions_category_idx",
+        "transactions_user_category_idx": {
+          "name": "transactions_user_category_idx",
           "columns": [
+            "user_id",
             "category_id"
           ],
           "isUnique": false
+        },
+        "transactions_user_gmail_message_unique": {
+          "name": "transactions_user_gmail_message_unique",
+          "columns": [
+            "user_id",
+            "gmail_message_id"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -597,6 +670,13 @@
           "name": "id",
           "type": "text",
           "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
@@ -637,6 +717,13 @@
             "phone_e164"
           ],
           "isUnique": true
+        },
+        "whatsapp_numbers_user_idx": {
+          "name": "whatsapp_numbers_user_idx",
+          "columns": [
+            "user_id"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {},

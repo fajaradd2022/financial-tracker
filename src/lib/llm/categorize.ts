@@ -1,4 +1,8 @@
-import type { Category, TransactionDirection } from "@/lib/types";
+import type {
+  Category,
+  CategorySystemKey,
+  TransactionDirection,
+} from "@/lib/types";
 import { chatCompletion, type ChatMessage } from "./openrouter";
 import type { CompletionFn } from "./extract";
 
@@ -88,12 +92,15 @@ Transaksi:
 }
 
 /**
- * Kategori "Cash Expense" untuk tarik tunai — ditentukan di kode, bukan lewat
- * LLM. Ini aturan tetap, jadi memanggil model hanya menambah biaya dan
- * kemungkinan salah.
+ * Mencari kategori sistem lewat kuncinya (mis. tarik tunai selalu
+ * "Cash Expense", dana kolaborasi selalu "Dana Kolaborasi").
+ *
+ * Dicari lewat `systemKey`, bukan lewat nama, karena nama bisa berbeda antar
+ * user dan aturan tetap ini tidak boleh bergantung pada teks yang bisa berubah.
  */
-export function findCashExpenseCategory(
+export function findSystemCategory(
   categories: Category[],
+  key: CategorySystemKey,
 ): Category | undefined {
-  return categories.find((c) => c.isSystem && c.kind === "expense");
+  return categories.find((c) => c.systemKey === key);
 }

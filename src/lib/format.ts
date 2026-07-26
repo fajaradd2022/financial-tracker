@@ -1,5 +1,4 @@
 import type {
-  AccountOwner,
   CashWalletEntryType,
   ReviewReason,
   TransactionOrigin,
@@ -146,11 +145,6 @@ export const SOURCE_STYLE: Record<TransactionSource, string> = {
     "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
   manual_other:
     "bg-slate-100 text-slate-700 dark:bg-slate-500/15 dark:text-slate-300",
-};
-
-export const OWNER_LABEL: Record<AccountOwner, string> = {
-  husband: "Suami",
-  wife: "Istri",
 };
 
 export const ORIGIN_LABEL: Record<TransactionOrigin, string> = {
