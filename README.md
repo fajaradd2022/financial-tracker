@@ -1,4 +1,4 @@
-# Financial Tracker
+# Financial Tracker ("Release production v1.0.0")
 
 Pencatatan keuangan otomatis dari email notifikasi bank & e-wallet, multi-user,
 dengan fitur kolaborasi antar pengguna dan bot WhatsApp.
@@ -10,11 +10,13 @@ Kebutuhan produk lengkap ada di [PRD.md](PRD.md).
 ## Daftar isi
 
 **Mulai cepat**
+
 - [Status saat ini](#status-saat-ini)
 - [Menjalankan di komputer sendiri](#menjalankan-di-komputer-sendiri)
 - [Perintah](#perintah)
 
 **Menuju produksi**
+
 - [Ringkasan seluruh kredensial](#ringkasan-seluruh-kredensial)
 - [1 · Kunci acak (dibuat sendiri)](#1--kunci-acak-dibuat-sendiri)
 - [2 · Google Cloud — Gmail API](#2--google-cloud--gmail-api)
@@ -29,6 +31,7 @@ Kebutuhan produk lengkap ada di [PRD.md](PRD.md).
 - [Kalau bermasalah](#kalau-bermasalah)
 
 **Cara kerja produk**
+
 - [Model multi-tenant](#model-multi-tenant)
 - [Kolaborasi](#kolaborasi)
 - [Dashboard admin](#dashboard-admin)
@@ -40,28 +43,28 @@ Kebutuhan produk lengkap ada di [PRD.md](PRD.md).
 
 ## Status saat ini
 
-| Bagian | Status |
-|---|---|
-| Database (SQLite + Drizzle) | **Berfungsi** — skema, migrasi, seed, repository |
-| Autentikasi (Better Auth) | **Berfungsi** — login, sesi, peran, manajemen pengguna |
-| Multi-tenant | **Berfungsi** — data terisolasi penuh per user |
-| Web app (semua halaman) | **Berfungsi** — baca & tulis ke database sungguhan |
-| Kolaborasi antar user | **Berfungsi** — undangan, kantong bersaldo, report |
-| Pipeline ingestion (Gmail → LLM → transaksi) | **Kode lengkap & teruji**, menunggu kredensial |
-| Dashboard admin operasional | **Berfungsi** — status ingestion per akun, reset password |
-| Gmail per-user (OAuth in-app) | **Berfungsi** — token terenkripsi per akun |
-| Bot WhatsApp (WAHA) | **Berfungsi** — CRUD bahasa alami + konfirmasi + notifikasi |
-| Image Docker produksi | **Ada** — `Dockerfile` + `docker-compose.yml` |
+| Bagian                                       | Status                                                      |
+| -------------------------------------------- | ----------------------------------------------------------- |
+| Database (SQLite + Drizzle)                  | **Berfungsi** — skema, migrasi, seed, repository            |
+| Autentikasi (Better Auth)                    | **Berfungsi** — login, sesi, peran, manajemen pengguna      |
+| Multi-tenant                                 | **Berfungsi** — data terisolasi penuh per user              |
+| Web app (semua halaman)                      | **Berfungsi** — baca & tulis ke database sungguhan          |
+| Kolaborasi antar user                        | **Berfungsi** — undangan, kantong bersaldo, report          |
+| Pipeline ingestion (Gmail → LLM → transaksi) | **Kode lengkap & teruji**, menunggu kredensial              |
+| Dashboard admin operasional                  | **Berfungsi** — status ingestion per akun, reset password   |
+| Gmail per-user (OAuth in-app)                | **Berfungsi** — token terenkripsi per akun                  |
+| Bot WhatsApp (WAHA)                          | **Berfungsi** — CRUD bahasa alami + konfirmasi + notifikasi |
+| Image Docker produksi                        | **Ada** — `Dockerfile` + `docker-compose.yml`               |
 
 Diuji otomatis lewat `npm test` — **122 pemeriksaan**:
 
-| Perintah | Isi | Jumlah |
-|---|---|---|
-| `test:tenancy` | isolasi antar user (baca, tulis, hapus akun) | 21 |
-| `test:pipeline` | pipeline ingestion dengan email contoh & LLM tiruan | 19 |
-| `test:collaboration` | kolaborasi (anti dobel, kantong, privasi) | 43 |
-| `test:gmail` | enkripsi token & isolasi cache access token | 17 |
-| `test:whatsapp` | agent (konfirmasi, routing nomor, tool) | 22 |
+| Perintah             | Isi                                                 | Jumlah |
+| -------------------- | --------------------------------------------------- | ------ |
+| `test:tenancy`       | isolasi antar user (baca, tulis, hapus akun)        | 21     |
+| `test:pipeline`      | pipeline ingestion dengan email contoh & LLM tiruan | 19     |
+| `test:collaboration` | kolaborasi (anti dobel, kantong, privasi)           | 43     |
+| `test:gmail`         | enkripsi token & isolasi cache access token         | 17     |
+| `test:whatsapp`      | agent (konfirmasi, routing nomor, tool)             | 22     |
 
 Yang belum bisa dibuktikan otomatis hanyalah yang menyentuh layanan luar —
 penarikan email sungguhan dan pengiriman pesan WhatsApp — karena butuh
@@ -69,7 +72,7 @@ kredensial Gmail, OpenRouter, dan instance WAHA yang hidup.
 
 > **Catatan jujur soal Docker:** `Dockerfile` dan `docker-compose.yml` di repo ini
 > disusun dan diverifikasi per tahap secara lokal (build produksi, `npm ci
-> --omit=dev` di salinan bersih, migrasi tanpa TypeScript, `next start`, dan
+--omit=dev` di salinan bersih, migrasi tanpa TypeScript, `next start`, dan
 > perintah healthcheck-nya) — tetapi **`docker build` sendiri belum pernah
 > dijalankan**, karena Docker tidak terpasang di mesin pengembangan. Build
 > pertama Anda adalah build pertama image ini.
@@ -127,23 +130,23 @@ Bagian ini ditulis dengan asumsi Anda belum punya satu pun kredensial.
 
 ## Ringkasan seluruh kredensial
 
-| Variabel | Wajib? | Dari mana | Kalau kosong |
-|---|---|---|---|
-| `BETTER_AUTH_SECRET` | **Wajib** | dibuat sendiri | dipakai fallback pengembangan; semua sesi invalid saat nilainya berubah |
-| `BETTER_AUTH_URL` | **Wajib** | domain Anda | **login gagal 403** |
-| `ENCRYPTION_KEY` | **Wajib** | `npm run gen:key` | Gmail tidak bisa dihubungkan |
-| `DATABASE_PATH` | otomatis | diisi compose | default `./data/app.db` |
-| `GMAIL_CLIENT_ID` | untuk ingestion | Google Cloud Console | tombol "Hubungkan Gmail" mati |
-| `GMAIL_CLIENT_SECRET` | untuk ingestion | Google Cloud Console | sama |
-| `OPENROUTER_API_KEY` | untuk ingestion & bot | openrouter.ai | email tidak bisa diekstrak; bot tidak paham pesan |
-| `OPENROUTER_MODEL` | opsional | openrouter.ai | default `google/gemini-2.5-flash` |
-| `OWNER_ACCOUNT_NAMES` | opsional | nama Anda sendiri | deteksi transfer internal hanya lewat nomor rekening |
-| `WAHA_BASE_URL` | untuk bot | alamat WAHA | bot mati |
-| `WAHA_API_KEY` | untuk bot | dibuat sendiri | WAHA menolak panggilan |
-| `WAHA_SESSION` | untuk bot | nama sesi WAHA | default `default` |
-| `WAHA_WEBHOOK_SECRET` | untuk bot | dibuat sendiri | **webhook menolak semua pesan** |
-| `CRON_SECRET` | opsional | dibuat sendiri | endpoint polling manual tertutup |
-| `OWNER_EMAIL` / `OWNER_PASSWORD` / `OWNER_NAME` | opsional | pilihan Anda | dipakai default bawaan |
+| Variabel                                        | Wajib?                | Dari mana            | Kalau kosong                                                            |
+| ----------------------------------------------- | --------------------- | -------------------- | ----------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`                            | **Wajib**             | dibuat sendiri       | dipakai fallback pengembangan; semua sesi invalid saat nilainya berubah |
+| `BETTER_AUTH_URL`                               | **Wajib**             | domain Anda          | **login gagal 403**                                                     |
+| `ENCRYPTION_KEY`                                | **Wajib**             | `npm run gen:key`    | Gmail tidak bisa dihubungkan                                            |
+| `DATABASE_PATH`                                 | otomatis              | diisi compose        | default `./data/app.db`                                                 |
+| `GMAIL_CLIENT_ID`                               | untuk ingestion       | Google Cloud Console | tombol "Hubungkan Gmail" mati                                           |
+| `GMAIL_CLIENT_SECRET`                           | untuk ingestion       | Google Cloud Console | sama                                                                    |
+| `OPENROUTER_API_KEY`                            | untuk ingestion & bot | openrouter.ai        | email tidak bisa diekstrak; bot tidak paham pesan                       |
+| `OPENROUTER_MODEL`                              | opsional              | openrouter.ai        | default `google/gemini-2.5-flash`                                       |
+| `OWNER_ACCOUNT_NAMES`                           | opsional              | nama Anda sendiri    | deteksi transfer internal hanya lewat nomor rekening                    |
+| `WAHA_BASE_URL`                                 | untuk bot             | alamat WAHA          | bot mati                                                                |
+| `WAHA_API_KEY`                                  | untuk bot             | dibuat sendiri       | WAHA menolak panggilan                                                  |
+| `WAHA_SESSION`                                  | untuk bot             | nama sesi WAHA       | default `default`                                                       |
+| `WAHA_WEBHOOK_SECRET`                           | untuk bot             | dibuat sendiri       | **webhook menolak semua pesan**                                         |
+| `CRON_SECRET`                                   | opsional              | dibuat sendiri       | endpoint polling manual tertutup                                        |
+| `OWNER_EMAIL` / `OWNER_PASSWORD` / `OWNER_NAME` | opsional              | pilihan Anda         | dipakai default bawaan                                                  |
 
 Tiga variabel pertama yang "wajib" adalah wajib **untuk produksi**. Aplikasi
 tetap menyala tanpa mereka, tapi tidak layak dipakai sungguhan.
@@ -203,16 +206,16 @@ halaman Pengaturan, dan tokennya disimpan terenkripsi di database.
    project baru** (misal `financial-tracker`).
 
 2. **Aktifkan Gmail API**
-   *APIs & Services → Library →* cari **Gmail API** → **Enable**.
+   _APIs & Services → Library →_ cari **Gmail API** → **Enable**.
 
 3. **Isi OAuth consent screen**
-   *APIs & Services → OAuth consent screen*
+   _APIs & Services → OAuth consent screen_
    - User Type: **External**
      (pilih **Internal** hanya kalau Anda punya Google Workspace dan semua user
      ada di organisasi yang sama — lihat kotak peringatan di bawah, jalur ini
      jauh lebih mulus)
    - App name, support email, developer contact: isi apa adanya
-   - **Scopes** → *Add or remove scopes* → tambahkan dua ini:
+   - **Scopes** → _Add or remove scopes_ → tambahkan dua ini:
      ```
      https://www.googleapis.com/auth/gmail.readonly
      https://www.googleapis.com/auth/userinfo.email
@@ -221,7 +224,7 @@ halaman Pengaturan, dan tokennya disimpan terenkripsi di database.
      aplikasi ini
 
 4. **Buat OAuth client ID**
-   *APIs & Services → Credentials → Create Credentials → OAuth client ID*
+   _APIs & Services → Credentials → Create Credentials → OAuth client ID_
    - Application type: **Web application**
    - **Authorized redirect URIs** — isi **persis**, termasuk `https://` dan
      tanpa garis miring di akhir:
@@ -243,12 +246,12 @@ halaman Pengaturan, dan tokennya disimpan terenkripsi di database.
 > Anda akan berhenti seminggu setelah deploy, dan semua orang harus
 > menghubungkan Gmail-nya ulang — setiap minggu, selamanya.
 >
-> **Solusinya:** di *OAuth consent screen*, tekan **Publish app** sehingga
+> **Solusinya:** di _OAuth consent screen_, tekan **Publish app** sehingga
 > statusnya menjadi **In production**. Refresh token berhenti kedaluwarsa.
 >
-> Karena `gmail.readonly` termasuk *restricted scope*, app yang belum
-> diverifikasi Google akan menampilkan layar peringatan *"Google hasn't verified
-> this app"* saat user menyetujui. Untuk pemakaian pribadi/keluarga ini bukan
+> Karena `gmail.readonly` termasuk _restricted scope_, app yang belum
+> diverifikasi Google akan menampilkan layar peringatan _"Google hasn't verified
+> this app"_ saat user menyetujui. Untuk pemakaian pribadi/keluarga ini bukan
 > penghalang — tekan **Advanced → Go to (unsafe)** dan lanjutkan. Verifikasi
 > penuh baru relevan kalau aplikasinya dibuka untuk publik luas.
 >
@@ -272,7 +275,7 @@ dan memahami perintah bahasa alami di bot WhatsApp.
 1. Daftar di [openrouter.ai](https://openrouter.ai)
 2. **Credits** → isi saldo (beberapa dolar sudah sangat cukup — model default
    murah dan satu email hanya butuh sekali panggil)
-3. **Keys** → *Create Key* → salin nilainya (**hanya ditampilkan sekali**)
+3. **Keys** → _Create Key_ → salin nilainya (**hanya ditampilkan sekali**)
 4. Isi `OPENROUTER_API_KEY`
 
 Model diatur lewat `OPENROUTER_MODEL` dan bisa diganti tanpa mengubah kode.
@@ -288,17 +291,17 @@ bank. Daftar model beserta harganya ada di
 
 ## 4 · WAHA — WhatsApp
 
-WAHA (*WhatsApp HTTP API*) adalah layanan yang **Anda jalankan sendiri**, sudah
+WAHA (_WhatsApp HTTP API_) adalah layanan yang **Anda jalankan sendiri**, sudah
 termasuk di `docker-compose.yml`. Tidak ada pendaftaran dan tidak ada API key
 yang diberikan pihak lain — `WAHA_API_KEY` adalah nilai yang **Anda tentukan
 sendiri**, lalu dipasang di kedua sisi.
 
-| Variabel | Isi |
-|---|---|
-| `WAHA_API_KEY` | string acak buatan Anda, dipakai aplikasi **dan** WAHA |
-| `WAHA_BASE_URL` | `http://waha:3000` di dalam compose |
-| `WAHA_SESSION` | `default`, kecuali Anda mengubahnya di WAHA |
-| `WAHA_WEBHOOK_SECRET` | string acak buatan Anda (lihat bagian 1) |
+| Variabel              | Isi                                                    |
+| --------------------- | ------------------------------------------------------ |
+| `WAHA_API_KEY`        | string acak buatan Anda, dipakai aplikasi **dan** WAHA |
+| `WAHA_BASE_URL`       | `http://waha:3000` di dalam compose                    |
+| `WAHA_SESSION`        | `default`, kecuali Anda mengubahnya di WAHA            |
+| `WAHA_WEBHOOK_SECRET` | string acak buatan Anda (lihat bagian 1)               |
 
 ### Menyambungkan nomor
 
@@ -306,7 +309,7 @@ sendiri**, lalu dipasang di kedua sisi.
 2. Buka dashboard WAHA di `http://ip-server:3001` — masuk dengan
    `WAHA_API_KEY` Anda
 3. Mulai sesi, lalu **scan QR** dari HP
-4. Daftarkan nomor tiap orang di *Pengaturan → WhatsApp* di dalam aplikasi
+4. Daftarkan nomor tiap orang di _Pengaturan → WhatsApp_ di dalam aplikasi
 
 > **Pakai nomor khusus bot, bukan nomor pribadi Anda.** WAHA bekerja lewat
 > protokol WhatsApp Web yang tidak resmi. Ada kemungkinan nomornya kena
@@ -334,9 +337,9 @@ tanpa ini tidak ada email yang masuk untuk diproses.
    yang isinya memang cuma notifikasi bank.
 
 2. **Atur forwarding di Gmail utama**
-   *Settings → Forwarding and POP/IMAP → Add a forwarding address* → masukkan
+   _Settings → Forwarding and POP/IMAP → Add a forwarding address_ → masukkan
    inbox khusus tadi → verifikasi lewat email konfirmasi.
-   Lalu *Filters → Create a new filter*: isi `From` dengan alamat pengirim bank,
+   Lalu _Filters → Create a new filter_: isi `From` dengan alamat pengirim bank,
    centang **Forward it to** inbox khusus.
 
 3. Di aplikasi: **Pengaturan → Hubungkan Gmail**, setujui di halaman Google,
@@ -370,7 +373,7 @@ Git, reverse proxy, dan sertifikat HTTPS otomatis.
 
 **1. Buat resource**
 
-*Project → Add Resource → **Docker Compose*** (bukan "Nixpacks" dan bukan
+\*Project → Add Resource → **Docker Compose\*** (bukan "Nixpacks" dan bukan
 "Dockerfile" — compose-nya sudah menyusun aplikasi + WAHA sekaligus).
 
 Arahkan ke repository ini, pilih branch, dan isi lokasi compose file:
@@ -381,8 +384,8 @@ Arahkan ke repository ini, pilih branch, dan isi lokasi compose file:
 Di `docker-compose.yml`, **hapus blok `ports:` pada service `app`**:
 
 ```yaml
-    ports:
-      - "3000:3000"     # ← hapus baris ini di Coolify
+ports:
+  - "3000:3000" # ← hapus baris ini di Coolify
 ```
 
 Coolify punya proxy sendiri yang menyambung ke port kontainer secara internal.
@@ -394,7 +397,7 @@ QR, lalu dihapus.
 
 **3. Isi environment variables**
 
-Di tab *Environment Variables*, tambahkan satu per satu:
+Di tab _Environment Variables_, tambahkan satu per satu:
 
 ```
 BETTER_AUTH_SECRET=<hasil openssl rand -base64 32>
@@ -446,7 +449,7 @@ otomatis.
 **5. Pastikan volume-nya persisten**
 
 Compose sudah mendeklarasikan named volume `app-data` dan `waha-sessions`;
-Coolify menghormatinya. Cek di tab *Storages* bahwa keduanya terdaftar
+Coolify menghormatinya. Cek di tab _Storages_ bahwa keduanya terdaftar
 **sebelum** deploy pertama.
 
 Kalau tidak ada, tambahkan manual: volume `app-data` dipasang ke `/app/data`
@@ -477,12 +480,12 @@ https://domain-anda.com/api/gmail/callback
 
 ### Yang khusus perlu diperhatikan di Coolify
 
-| Hal | Penjelasan |
-|---|---|
-| **Jangan naikkan replika** | Penjadwal polling berjalan **di dalam** proses aplikasi. Dua instance menarik inbox yang sama dua kali bersamaan, dan SQLite hanya mengizinkan satu penulis. |
-| **Health check** | `Dockerfile` sudah punya `HEALTHCHECK` ke `/login`. Kalau Coolify meminta path sendiri, pakai `/login` — satu-satunya halaman yang tidak menuntut sesi, jadi 200 di sana benar-benar berarti siap melayani. |
-| **Mengubah env = redeploy** | Nilai env dibaca saat proses start. Setelah mengubahnya, jalankan ulang deploy. |
-| **Webhook WhatsApp** | Compose sudah mengarahkan WAHA ke `http://app:3000/api/whatsapp/webhook` lewat jaringan internal, jadi biasanya tidak perlu disentuh. URL publiknya (`https://domain-anda.com/api/whatsapp/webhook`) hanya diperlukan kalau WAHA dijalankan di luar compose ini. |
+| Hal                         | Penjelasan                                                                                                                                                                                                                                                       |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Jangan naikkan replika**  | Penjadwal polling berjalan **di dalam** proses aplikasi. Dua instance menarik inbox yang sama dua kali bersamaan, dan SQLite hanya mengizinkan satu penulis.                                                                                                     |
+| **Health check**            | `Dockerfile` sudah punya `HEALTHCHECK` ke `/login`. Kalau Coolify meminta path sendiri, pakai `/login` — satu-satunya halaman yang tidak menuntut sesi, jadi 200 di sana benar-benar berarti siap melayani.                                                      |
+| **Mengubah env = redeploy** | Nilai env dibaca saat proses start. Setelah mengubahnya, jalankan ulang deploy.                                                                                                                                                                                  |
+| **Webhook WhatsApp**        | Compose sudah mengarahkan WAHA ke `http://app:3000/api/whatsapp/webhook` lewat jaringan internal, jadi biasanya tidak perlu disentuh. URL publiknya (`https://domain-anda.com/api/whatsapp/webhook`) hanya diperlukan kalau WAHA dijalankan di luar compose ini. |
 
 ---
 
@@ -579,7 +582,7 @@ docker compose start app
 > **koneksi Gmail di dalamnya tidak bisa dibaca lagi** dan setiap user harus
 > menghubungkan ulang.
 
-Di Coolify, gunakan fitur *Backups* untuk menjadwalkan pencadangan volume, dan
+Di Coolify, gunakan fitur _Backups_ untuk menjadwalkan pencadangan volume, dan
 tetap catat `ENCRYPTION_KEY` di luar server.
 
 ---
@@ -598,17 +601,17 @@ Cadangkan dulu sebelum update yang mengubah skema.
 
 ## Kalau bermasalah
 
-| Gejala | Penyebab paling mungkin |
-|---|---|
-| **Login gagal / 403** | `BETTER_AUTH_URL` tidak sama persis dengan URL di browser. Cek skema (`http` vs `https`), subdomain, dan garis miring di akhir. |
-| **Data hilang setelah redeploy** | Volume `app-data` tidak terpasang. Cek tab *Storages* di Coolify, atau blok `volumes:` di compose. |
-| **"Koneksi Gmail bermasalah"** | Refresh token mati. Kalau berulang tiap ~7 hari: OAuth consent screen masih berstatus **Testing** — publikasikan ke *In production*. Kalau muncul setelah pindah server: `ENCRYPTION_KEY` berbeda dari yang dipakai saat token disimpan. |
-| **`redirect_uri_mismatch` saat hubungkan Gmail** | Redirect URI di Google Cloud tidak persis sama dengan `https://domain/api/gmail/callback`. Harus sama karakter per karakter. |
-| **Bot WhatsApp diam saja** | (a) `WAHA_WEBHOOK_SECRET` kosong → webhook menolak semua pesan; (b) nomor pengirim belum didaftarkan di Pengaturan → WhatsApp — nomor tak terdaftar sengaja diabaikan **tanpa balasan**. |
-| **Aplikasi tidak bisa memanggil WAHA** | `WAHA_BASE_URL` diisi `localhost`. Di dalam kontainer, `localhost` menunjuk kontainer itu sendiri — pakai `http://waha:3000`. |
-| **Email masuk tapi tidak jadi transaksi** | Alamat pengirim bank belum terdaftar di [src/lib/gmail/source-mapping.ts](src/lib/gmail/source-mapping.ts). Cek `docker compose logs app`. |
-| **Transaksi masuk dua kali** | Seharusnya tidak mungkin (`gmail_message_id` unik). Kalau terjadi, periksa apakah ada lebih dari satu instance aplikasi berjalan. |
-| **Container restart terus** | `docker compose logs app`. Paling sering: volume `/app/data` tidak bisa ditulis karena pemiliknya root. |
+| Gejala                                           | Penyebab paling mungkin                                                                                                                                                                                                                  |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Login gagal / 403**                            | `BETTER_AUTH_URL` tidak sama persis dengan URL di browser. Cek skema (`http` vs `https`), subdomain, dan garis miring di akhir.                                                                                                          |
+| **Data hilang setelah redeploy**                 | Volume `app-data` tidak terpasang. Cek tab _Storages_ di Coolify, atau blok `volumes:` di compose.                                                                                                                                       |
+| **"Koneksi Gmail bermasalah"**                   | Refresh token mati. Kalau berulang tiap ~7 hari: OAuth consent screen masih berstatus **Testing** — publikasikan ke _In production_. Kalau muncul setelah pindah server: `ENCRYPTION_KEY` berbeda dari yang dipakai saat token disimpan. |
+| **`redirect_uri_mismatch` saat hubungkan Gmail** | Redirect URI di Google Cloud tidak persis sama dengan `https://domain/api/gmail/callback`. Harus sama karakter per karakter.                                                                                                             |
+| **Bot WhatsApp diam saja**                       | (a) `WAHA_WEBHOOK_SECRET` kosong → webhook menolak semua pesan; (b) nomor pengirim belum didaftarkan di Pengaturan → WhatsApp — nomor tak terdaftar sengaja diabaikan **tanpa balasan**.                                                 |
+| **Aplikasi tidak bisa memanggil WAHA**           | `WAHA_BASE_URL` diisi `localhost`. Di dalam kontainer, `localhost` menunjuk kontainer itu sendiri — pakai `http://waha:3000`.                                                                                                            |
+| **Email masuk tapi tidak jadi transaksi**        | Alamat pengirim bank belum terdaftar di [src/lib/gmail/source-mapping.ts](src/lib/gmail/source-mapping.ts). Cek `docker compose logs app`.                                                                                               |
+| **Transaksi masuk dua kali**                     | Seharusnya tidak mungkin (`gmail_message_id` unik). Kalau terjadi, periksa apakah ada lebih dari satu instance aplikasi berjalan.                                                                                                        |
+| **Container restart terus**                      | `docker compose logs app`. Paling sering: volume `/app/data` tidak bisa ditulis karena pemiliknya root.                                                                                                                                  |
 
 ---
 
@@ -671,9 +674,9 @@ uangnya terlihat utuh belum terpakai. Sistem tidak menebak.
 
 **Memutus hubungan** punya dua bentuk, karena keduanya sah:
 
-| Aksi | Akibat |
-|---|---|
-| **Putus** | Hubungan berstatus `revoked`; seluruh riwayat dan angka tetap tersimpan dan bisa dilihat. Bisa disambung lagi kapan saja. |
+| Aksi              | Akibat                                                                                                                                                                      |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Putus**         | Hubungan berstatus `revoked`; seluruh riwayat dan angka tetap tersimpan dan bisa dilihat. Bisa disambung lagi kapan saja.                                                   |
 | **Hapus riwayat** | Baris hubungan dan seluruh entrinya dihapus dari database. Transaksi yang tadinya ditandai tetap ada, hanya penandanya dilepas — jadi tidak ada transaksi yang ikut hilang. |
 
 Mengundang ulang kolaborator yang sudah diputus akan **menghidupkan kembali**
@@ -700,16 +703,16 @@ transaksinya tidak pernah ikut.
 mengirim dari nomor pengirimnya lalu menulis ke buku orang itu, jadi tidak perlu
 sesi WAHA per user.
 
-| Arah | Cara |
-|---|---|
-| Masuk (WA → aplikasi) | WAHA `POST` ke `/api/whatsapp/webhook` |
+| Arah                   | Cara                                                              |
+| ---------------------- | ----------------------------------------------------------------- |
+| Masuk (WA → aplikasi)  | WAHA `POST` ke `/api/whatsapp/webhook`                            |
 | Keluar (aplikasi → WA) | Aplikasi memanggil `POST /api/sendText` dengan header `X-Api-Key` |
 
 ### Tiga lapis penjagaan
 
 1. **Header rahasia.** Webhook terbuka ke internet. Tanpa ini, siapa pun yang
-   menemukan URL-nya bisa mengirim JSON palsu berisi *"catat pengeluaran 10
-   juta"* ke buku Anda, atau memicu panggilan LLM berbayar berulang-ulang.
+   menemukan URL-nya bisa mengirim JSON palsu berisi _"catat pengeluaran 10
+   juta"_ ke buku Anda, atau memicu panggilan LLM berbayar berulang-ulang.
    Webhook **menolak semua pesan** selama `WAHA_WEBHOOK_SECRET` kosong.
 2. **Whitelist nomor.** Nomor tak terdaftar diabaikan **tanpa balasan** — bukan
    dibalas "Anda tidak berhak", karena balasan itu justru memberi tahu penyerang
@@ -733,18 +736,18 @@ merusak apa pun.
 
 ## Halaman
 
-| Rute | Isi |
-|---|---|
-| `/login` | Login email + password (tidak ada pendaftaran mandiri) |
-| `/dashboard` | Ringkasan periode, 5 transaksi terakhir, chart pemasukan & pengeluaran per kategori, rekonsiliasi tunai, report kolaborasi |
-| `/transactions` | Daftar + filter + pencarian, tambah transaksi, export Excel, paginasi |
-| `/transactions/[id]` | Detail, koreksi data, ubah kategori/status internal, tandai kolaborasi, hapus |
-| `/collaboration` | Undangan, kantong dana per kolaborator, entri menunggu dicocokkan |
-| `/cash` | Saldo dompet tunai, riwayat, tambah transaksi tunai (masuk/keluar), export Excel |
-| `/settings` | Koneksi Gmail, konfigurasi ingestion, status sumber, WhatsApp (URL webhook + whitelist nomor) |
-| `/settings/accounts` | Whitelist rekening & e-wallet milik sendiri |
-| `/settings/categories` | Kelola daftar kategori tetap |
-| `/settings/users` | Manajemen pengguna + status operasional per akun & reset password |
+| Rute                   | Isi                                                                                                                        |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `/login`               | Login email + password (tidak ada pendaftaran mandiri)                                                                     |
+| `/dashboard`           | Ringkasan periode, 5 transaksi terakhir, chart pemasukan & pengeluaran per kategori, rekonsiliasi tunai, report kolaborasi |
+| `/transactions`        | Daftar + filter + pencarian, tambah transaksi, export Excel, paginasi                                                      |
+| `/transactions/[id]`   | Detail, koreksi data, ubah kategori/status internal, tandai kolaborasi, hapus                                              |
+| `/collaboration`       | Undangan, kantong dana per kolaborator, entri menunggu dicocokkan                                                          |
+| `/cash`                | Saldo dompet tunai, riwayat, tambah transaksi tunai (masuk/keluar), export Excel                                           |
+| `/settings`            | Koneksi Gmail, konfigurasi ingestion, status sumber, WhatsApp (URL webhook + whitelist nomor)                              |
+| `/settings/accounts`   | Whitelist rekening & e-wallet milik sendiri                                                                                |
+| `/settings/categories` | Kelola daftar kategori tetap                                                                                               |
+| `/settings/users`      | Manajemen pengguna + status operasional per akun & reset password                                                          |
 
 ## Struktur & keputusan desain
 
@@ -810,7 +813,7 @@ Beberapa keputusan yang sengaja diambil:
   "disembunyikan" baru diterapkan setelah hydration, angka aslinya sempat
   terlihat satu frame. Skripnya wajib tinggal di modul netral
   (`lib/preferences.ts`) — kalau diekspor dari modul `"use client"`, root layout
-  yang server component menerima *client reference*, bukan string, dan yang
+  yang server component menerima _client reference_, bukan string, dan yang
   tertulis ke HTML jadi skrip rusak.
 - **Sesi diverifikasi di layout server, bukan middleware/proxy.** Middleware hanya
   bisa melihat cookie (pengecekan optimistis); di layout sesinya benar-benar
