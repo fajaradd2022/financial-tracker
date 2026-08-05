@@ -31,7 +31,7 @@ services:
     ports:
       # Di Coolify, baris ini boleh dihapus — proxy-nya yang mengarahkan domain
       # ke port 3000 kontainer.
-      - "3000:3000"
+      - "3100:3000"
 
     environment:
       NODE_ENV: production
