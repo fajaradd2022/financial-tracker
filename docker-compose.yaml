@@ -21,6 +21,9 @@ services:
     image: financial-tracker:latest
     restart: unless-stopped
 
+    ports:  
+      - "3010:3000"
+
     # SATU instance saja — jangan pernah menaikkan replika.
     # Penjadwal polling berjalan di dalam proses aplikasi
     # (src/instrumentation.ts), jadi dua instance berarti inbox yang sama
@@ -71,20 +74,20 @@ services:
       - app-data:/app/data
 
   # WhatsApp HTTP API. Hapus service ini kalau tidak memakai bot WhatsApp.
-  waha:
-    image: devlikeapro/waha:latest
-    restart: unless-stopped
+  #waha:
+    #image: devlikeapro/waha:latest
+    #restart: unless-stopped
 
-    environment:
-      WHATSAPP_API_KEY: ${WAHA_API_KEY:-}
-      WHATSAPP_HOOK_URL: https://waha.fajarsodiq.com/api/whatsapp/webhook
-      WHATSAPP_HOOK_EVENTS: message
-      WHATSAPP_HOOK_CUSTOM_HEADERS: '[{"name":"X-Webhook-Secret","value":"${WAHA_WEBHOOK_SECRET:-}"}]'
-      WHATSAPP_RESTART_ALL_SESSIONS: "True"
+    #environment:
+    #  WHATSAPP_API_KEY: ${WAHA_API_KEY:-}
+    #  WHATSAPP_HOOK_URL: https://waha.fajarsodiq.com/api/whatsapp/webhook
+    #  WHATSAPP_HOOK_EVENTS: message
+    # WHATSAPP_HOOK_CUSTOM_HEADERS: '[{"name":"X-Webhook-Secret","value":"${WAHA_WEBHOOK_SECRET:-}"}]'
+    #  WHATSAPP_RESTART_ALL_SESSIONS: "True"
 
-    volumes:
+    #volumes:
       # Sesi WhatsApp. Tanpa ini, setiap restart menuntut scan QR ulang.
-      - waha-sessions:/app/.sessions
+      #- waha-sessions:/app/.sessions
 
 volumes:
   app-data:
