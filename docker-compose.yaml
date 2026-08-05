@@ -28,10 +28,7 @@ services:
     deploy:
       replicas: 1
 
-    ports:
-      # Di Coolify, baris ini boleh dihapus — proxy-nya yang mengarahkan domain
-      # ke port 3000 kontainer.
-      - "3100:3000"
+
 
     environment:
       NODE_ENV: production
@@ -55,7 +52,7 @@ services:
       # --- WhatsApp (opsional; kosong = bot mati) ---
       # Nama service, bukan localhost: di dalam jaringan compose, "localhost"
       # milik kontainer ini sendiri.
-      WAHA_BASE_URL: ${WAHA_BASE_URL:-http://waha:3000}
+      WAHA_BASE_URL: ${WAHA_BASE_URL:-https://waha.fajarsodiq.com}
       WAHA_API_KEY: ${WAHA_API_KEY:-}
       WAHA_SESSION: ${WAHA_SESSION:-default}
       WAHA_WEBHOOK_SECRET: ${WAHA_WEBHOOK_SECRET:-}
@@ -85,7 +82,7 @@ services:
 
     environment:
       WHATSAPP_API_KEY: ${WAHA_API_KEY:-}
-      WHATSAPP_HOOK_URL: http://app:3000/api/whatsapp/webhook
+      WHATSAPP_HOOK_URL: https://waha.fajarsodiq.com/api/whatsapp/webhook
       WHATSAPP_HOOK_EVENTS: message
       WHATSAPP_HOOK_CUSTOM_HEADERS: '[{"name":"X-Webhook-Secret","value":"${WAHA_WEBHOOK_SECRET:-}"}]'
       WHATSAPP_RESTART_ALL_SESSIONS: "True"
